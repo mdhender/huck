@@ -306,6 +306,10 @@ func runAdminCreate(ctx context.Context, cfg *config.Config, stdin io.Reader, st
 		return errors.New("an admin user already exists; refusing to create another")
 	}
 
+	if err := auth.ValidateHandle(cfg.AdminHandle); err != nil {
+		return err
+	}
+
 	password, err := readAdminPassword(stdin, stderr)
 	if err != nil {
 		return err
@@ -331,10 +335,13 @@ func runAdminCreate(ctx context.Context, cfg *config.Config, stdin io.Reader, st
 // readAdminPassword honours $HUCK_ADMIN_PASSWORD; otherwise prompts on the
 // TTY without echo and asks for confirmation. If stdin isn't a TTY (e.g.
 // in CI) but the env var is unset, we fall back to a single line read.
+//
+// Whatever path produces the password, it must satisfy
+// [auth.ValidatePassword] (DESIGN.md §8.7) before being returned.
 func readAdminPassword(stdin io.Reader, stderr io.Writer) (string, error) {
 	if pw := os.Getenv("HUCK_ADMIN_PASSWORD"); pw != "" {
-		if len(pw) < 8 {
-			return "", errors.New("HUCK_ADMIN_PASSWORD must be at least 8 characters")
+		if err := auth.ValidatePassword(pw); err != nil {
+			return "", err
 		}
 		return pw, nil
 	}
@@ -355,8 +362,8 @@ func readAdminPassword(stdin io.Reader, stderr io.Writer) (string, error) {
 		if string(pw1) != string(pw2) {
 			return "", errors.New("passwords did not match")
 		}
-		if len(pw1) < 8 {
-			return "", errors.New("password must be at least 8 characters")
+		if err := auth.ValidatePassword(string(pw1)); err != nil {
+			return "", err
 		}
 		return string(pw1), nil
 	}
@@ -371,8 +378,8 @@ func readAdminPassword(stdin io.Reader, stderr io.Writer) (string, error) {
 		return "", errors.New("no password supplied on stdin")
 	}
 	pw := strings.TrimRight(scanner.Text(), "\r\n")
-	if len(pw) < 8 {
-		return "", errors.New("password must be at least 8 characters")
+	if err := auth.ValidatePassword(pw); err != nil {
+		return "", err
 	}
 	return pw, nil
 }
