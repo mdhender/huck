@@ -1,7 +1,11 @@
 package mail_test
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mdhender/huck/internal/mail"
@@ -24,9 +28,6 @@ func TestMailgunMailerNewValidation(t *testing.T) {
 		{"all set + EU base", mail.MailgunConfig{
 			Domain: "d", APIKey: "k", From: "f", APIBase: "https://api.eu.mailgun.net",
 		}, false},
-		{"api-base with version suffix is rejected by SDK", mail.MailgunConfig{
-			Domain: "d", APIKey: "k", From: "f", APIBase: "https://api.eu.mailgun.net/v3",
-		}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,6 +40,78 @@ func TestMailgunMailerNewValidation(t *testing.T) {
 				t.Errorf("NewMailgunMailer: unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestMailgunMailerSend(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v3/sandbox.mailgun.org/messages" {
+			t.Fatalf("path = %q, want %q", r.URL.Path, "/v3/sandbox.mailgun.org/messages")
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
+			t.Fatalf("content-type = %q", got)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		if got := r.PostForm.Get("from"); got != "huck <noreply@example.com>" {
+			t.Fatalf("form[from] = %q", got)
+		}
+		if got := r.PostForm.Get("to"); got != "user@example.com" {
+			t.Fatalf("form[to] = %q", got)
+		}
+		if got := r.PostForm.Get("subject"); got != "subject" {
+			t.Fatalf("form[subject] = %q", got)
+		}
+		if got := r.PostForm.Get("html"); got != "<p>hello</p>" {
+			t.Fatalf("form[html] = %q", got)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"abc123","message":"Queued. Thank you."}`))
+	}))
+	defer server.Close()
+
+	m, err := mail.NewMailgunMailer(mail.MailgunConfig{
+		Domain:  "sandbox.mailgun.org",
+		APIKey:  "key-test",
+		From:    "huck <noreply@example.com>",
+		APIBase: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewMailgunMailer: %v", err)
+	}
+	if err := m.Send(context.Background(), "user@example.com", "subject", "<p>hello</p>"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+}
+
+func TestMailgunMailerSendHTTPError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "denied", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	m, err := mail.NewMailgunMailer(mail.MailgunConfig{
+		Domain:  "sandbox.mailgun.org",
+		APIKey:  "key-test",
+		From:    "huck <noreply@example.com>",
+		APIBase: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewMailgunMailer: %v", err)
+	}
+
+	err = m.Send(context.Background(), "user@example.com", "subject", "<p>hello</p>")
+	if err == nil {
+		t.Fatal("Send: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), "status=401") {
+		t.Fatalf("Send error = %q, want status=401", err)
 	}
 }
 

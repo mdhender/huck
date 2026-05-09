@@ -8,6 +8,10 @@ JWT in an HttpOnly cookie.
 The full design lives in [docs/DESIGN.md](docs/DESIGN.md). The Sprint 1
 implementation plan lives in [docs/sprint-1.md](docs/sprint-1.md).
 
+Email delivery uses Mailgun through a small internal stdlib-only client
+in `internal/email`. See [docs/mailgun-lite.md](docs/mailgun-lite.md)
+for the rationale and verification notes.
+
 ## Quickstart
 
 Requires Go 1.23+ (any current stable Go works). **No CGO toolchain
@@ -64,6 +68,7 @@ not v4", and "registration is invite-only" rules.
 cmd/huck/            # entry point + ff/v4 command tree
 internal/config/     # flag/env/file binding
 internal/db/         # zombiezen open / create / migrate
+internal/email/      # tiny stdlib-only Mailgun client
 internal/auth/       # bcrypt, JWT, login/logout handlers
 internal/users/      # user store
 internal/server/     # Echo wiring, renderer, middleware
@@ -71,3 +76,10 @@ migrations/          # NNNN_*.sql, embedded
 web/                 # templates + static assets, embedded
 docs/                # design + sprint plans
 ```
+
+## Contributors
+
+Project contributors include:
+
+* Michael D Henderson
+* OpenAI Codex

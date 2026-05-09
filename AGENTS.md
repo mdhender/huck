@@ -46,7 +46,7 @@ approval.
 | JWT lib        | `github.com/golang-jwt/jwt/v5`                |
 | SQLite         | `zombiezen.com/go/sqlite` (+ `sqlitex`)       |
 | Flags/commands | `github.com/peterbourgon/ff/v4`               |
-| Email          | `github.com/mailgun/mailgun-go/v5`            |
+| Email          | Mailgun HTTP API via internal stdlib client   |
 | Password hash  | `golang.org/x/crypto/bcrypt`                  |
 | Templates      | stdlib `html/template`                        |
 | Frontend       | HTMX + AlpineJS + Pico.css (served from `web/static`) |

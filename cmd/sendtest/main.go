@@ -49,7 +49,7 @@ func main() {
 <p>Hello from huck's <code>internal/mail</code> package.</p>
 <p>If you're reading this, the Mailgun sandbox credentials in
 <code>.env.development.local</code> work end-to-end against
-<code>mailgun-go/v5</code>.</p>
+<code>api.mailgun.net</code>.</p>
 </body></html>`
 
 	fmt.Printf("sending to %s via domain %s ... ", to, cfg.Domain)
