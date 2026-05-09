@@ -27,6 +27,7 @@ import (
 	"github.com/mdhender/huck/internal/config"
 	"github.com/mdhender/huck/internal/db"
 	"github.com/mdhender/huck/internal/dotenv"
+	"github.com/mdhender/huck/internal/invites"
 	"github.com/mdhender/huck/internal/mail"
 	"github.com/mdhender/huck/internal/server"
 	"github.com/mdhender/huck/internal/users"
@@ -151,7 +152,8 @@ func runServe(ctx context.Context, cfg *config.Config, _ io.Writer) error {
 		return fmt.Errorf("migrate on startup: %w", err)
 	}
 
-	store := users.NewStore(pool)
+	usersStore := users.NewStore(pool)
+	invitesStore := invites.NewStore(pool)
 	mailer, err := mail.NewMailgunMailer(mail.MailgunConfig{
 		Domain:  cfg.MailgunDomain,
 		APIKey:  cfg.MailgunAPIKey,
@@ -161,7 +163,7 @@ func runServe(ctx context.Context, cfg *config.Config, _ io.Writer) error {
 	if err != nil {
 		return err
 	}
-	srv, err := server.New(cfg, store, mailer, logger)
+	srv, err := server.New(cfg, pool, usersStore, invitesStore, mailer, logger)
 	if err != nil {
 		return err
 	}

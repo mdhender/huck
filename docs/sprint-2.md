@@ -192,7 +192,7 @@ pass and a commit lands on `main`.
   `LogValue() slog.Value` is encouraged but not required this sprint).
   *Acceptance:* `go test ./internal/invites/...` passes.
 
-- [ ] **T5 — Email template + signup flow (single transaction).**
+- [x] **T5 — Email template + signup flow (single transaction).**
   `web/templates/email/invite.html` — HTML invite body with subject
   `Welcome to Huck!` and link `${BASE_URL}/signup/<token>?email=<urlencoded>`.
   `web/templates/pages/signup.html` — three fields per §9 step 4:

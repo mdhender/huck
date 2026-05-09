@@ -114,6 +114,14 @@ func (s *Store) GetByToken(ctx context.Context, t Token) (Invite, error) {
 	return getByToken(conn, t)
 }
 
+// GetByTokenOnConn is the connection-scoped sibling of GetByToken. The
+// signup handler reads the invite inside the same transaction it later
+// uses for the user-insert + Consume, so no extra pool round-trips
+// happen across the boundary.
+func (s *Store) GetByTokenOnConn(conn *sqlite.Conn, t Token) (Invite, error) {
+	return getByToken(conn, t)
+}
+
 // Resend refreshes an existing invite's expires_at to now+7d and returns
 // the updated row. Resend rejects consumed invites with ErrConsumed; an
 // expired-but-not-consumed invite is allowed (DESIGN.md §9 step 2 says

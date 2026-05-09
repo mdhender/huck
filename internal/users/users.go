@@ -56,20 +56,27 @@ func Normalise(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 // Create inserts a new user. Returns ErrHandleTaken / ErrEmailTaken when
 // the unique constraints fire.
 func (s *Store) Create(ctx context.Context, in NewUser) (User, error) {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return User{}, err
+	}
+	defer s.pool.Put(conn)
+	return s.CreateOnConn(conn, in)
+}
+
+// CreateOnConn inserts a new user using the supplied connection. Used by
+// callers (notably the signup handler in internal/server) that need to
+// include the insert in their own transaction. The same uniqueness
+// errors are surfaced as Create.
+func (s *Store) CreateOnConn(conn *sqlite.Conn, in NewUser) (User, error) {
 	in.Handle = Normalise(in.Handle)
 	in.Email = Normalise(in.Email)
 	if in.Handle == "" || in.Email == "" || in.PasswordHash == "" {
 		return User{}, errors.New("users: handle, email, and password hash are required")
 	}
 
-	conn, err := s.pool.Take(ctx)
-	if err != nil {
-		return User{}, err
-	}
-	defer s.pool.Put(conn)
-
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	err = sqlitex.Execute(conn, `
+	err := sqlitex.Execute(conn, `
 		INSERT INTO users (handle, email, password_hash, is_admin, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?);`,
 		&sqlitex.ExecOptions{
@@ -79,7 +86,9 @@ func (s *Store) Create(ctx context.Context, in NewUser) (User, error) {
 		return User{}, classifyInsertErr(err)
 	}
 
-	return s.GetByID(ctx, conn.LastInsertRowID())
+	return getOneOnConn(conn,
+		`SELECT id, handle, email, password_hash, is_admin, created_at, updated_at
+		   FROM users WHERE id = ?;`, conn.LastInsertRowID())
 }
 
 // GetByHandle looks up a user by handle. The lookup lowercases the input
@@ -123,12 +132,18 @@ func (s *Store) getOne(ctx context.Context, query string, arg any) (User, error)
 		return User{}, err
 	}
 	defer s.pool.Put(conn)
+	return getOneOnConn(conn, query, arg)
+}
 
+// getOneOnConn runs a single-row SELECT against the supplied connection
+// and decodes a User. Shared by getOne (pool-acquired) and CreateOnConn
+// (caller-supplied transaction connection).
+func getOneOnConn(conn *sqlite.Conn, query string, arg any) (User, error) {
 	var (
 		u     User
 		found bool
 	)
-	err = sqlitex.Execute(conn, query, &sqlitex.ExecOptions{
+	err := sqlitex.Execute(conn, query, &sqlitex.ExecOptions{
 		Args: []any{arg},
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			found = true

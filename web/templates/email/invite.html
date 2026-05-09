@@ -1,0 +1,16 @@
+{{ define "email/invite.html" -}}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Welcome to Huck!</title>
+</head>
+<body>
+<h1>Welcome to Huck!</h1>
+<p>You have been invited to create an account on <strong>huck</strong>.</p>
+<p>This invite is bound to <code>{{ .Email }}</code>.</p>
+<p><a href="{{ .URL }}">Click here to set up your account.</a></p>
+<p>This link expires in 7 days. If you did not expect this email, you can safely ignore it.</p>
+</body>
+</html>
+{{- end }}

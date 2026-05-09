@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"io"
@@ -21,9 +22,14 @@ import (
 //   - "pages/foo.html" + HX    → render only the page's "content" block.
 //   - "pages/foo.html"         → render layout.html with the page's blocks
 //     (title, content, scripts).
+//
+// Email templates live alongside but are reached via [Renderer.RenderEmail]
+// rather than echo.Renderer.Render — they never go through layout.html and
+// are produced as a string for the mailer.
 type Renderer struct {
 	pages    map[string]*template.Template // page name → cloned layout + page
 	partials *template.Template            // partials/* parsed alone
+	emails   *template.Template            // email/*   parsed alone, no layout
 }
 
 // NewRenderer builds the renderer from the embedded template FS.
@@ -70,7 +76,30 @@ func NewRenderer() (*Renderer, error) {
 		}
 	}
 
+	// Email templates live in their own tree: no layout, executed as a
+	// string by RenderEmail (the mailer takes a body, not a writer).
+	emailPaths, err := fs.Glob(web.Templates, "templates/email/*.html")
+	if err != nil {
+		return nil, fmt.Errorf("server: glob emails: %w", err)
+	}
+	r.emails = template.New("emails")
+	if len(emailPaths) > 0 {
+		if _, err := r.emails.ParseFS(web.Templates, emailPaths...); err != nil {
+			return nil, fmt.Errorf("server: parse emails: %w", err)
+		}
+	}
+
 	return r, nil
+}
+
+// RenderEmail renders the named email template (e.g. "email/invite.html")
+// to a string suitable for handing to a Mailer.
+func (r *Renderer) RenderEmail(name string, data any) (string, error) {
+	var buf bytes.Buffer
+	if err := r.emails.ExecuteTemplate(&buf, name, data); err != nil {
+		return "", fmt.Errorf("server: render email %q: %w", name, err)
+	}
+	return buf.String(), nil
 }
 
 // Render satisfies echo.Renderer.

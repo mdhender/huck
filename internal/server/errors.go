@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v5"
+
+	"github.com/mdhender/huck/internal/invites"
 )
 
 // errorView is the data shape consumed by pages/error.html and
@@ -28,14 +30,24 @@ func (s *Server) installErrorHandler() {
 		message := "Something went wrong."
 
 		var he *echo.HTTPError
-		if errors.As(err, &he) {
+		switch {
+		case errors.Is(err, invites.ErrNotFound):
+			status = http.StatusNotFound
+			message = "This invite link does not exist."
+		case errors.Is(err, invites.ErrExpired):
+			status = http.StatusGone
+			message = "This invite has expired. Ask your admin to resend it."
+		case errors.Is(err, invites.ErrConsumed):
+			status = http.StatusGone
+			message = "This invite has already been used."
+		case errors.As(err, &he):
 			status = he.Code
 			if he.Message != "" {
 				message = he.Message
 			} else {
 				message = http.StatusText(status)
 			}
-		} else {
+		default:
 			message = http.StatusText(status)
 			s.logger.Error("unhandled handler error", "err", err, "path", c.Request().URL.Path)
 		}

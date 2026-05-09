@@ -9,12 +9,15 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
+	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/mdhender/huck/internal/auth"
 	"github.com/mdhender/huck/internal/config"
+	"github.com/mdhender/huck/internal/invites"
 	"github.com/mdhender/huck/internal/mail"
 	"github.com/mdhender/huck/internal/users"
 	"github.com/mdhender/huck/web"
@@ -23,11 +26,14 @@ import (
 // Server bundles the dependencies a handler needs. It is intentionally
 // a struct, not a context lookup, so handlers stay typed.
 type Server struct {
-	cfg    *config.Config
-	echo   *echo.Echo
-	users  *users.Store
-	mailer mail.Mailer
-	logger *slog.Logger
+	cfg      *config.Config
+	echo     *echo.Echo
+	renderer *Renderer
+	pool     *sqlitex.Pool
+	users    *users.Store
+	invites  *invites.Store
+	mailer   mail.Mailer
+	logger   *slog.Logger
 
 	jwtKey []byte
 }
@@ -35,9 +41,12 @@ type Server struct {
 // New returns an Echo instance fully configured with middleware, routes,
 // and the renderer. The caller drives the lifecycle (Start/Shutdown).
 //
-// mailer is taken as an interface so tests can inject mail.FakeMailer;
-// no Sprint 2 handler calls it yet (T6 wires the admin invite POSTs).
-func New(cfg *config.Config, store *users.Store, mailer mail.Mailer, logger *slog.Logger) (*Server, error) {
+// pool is held by the Server so multi-store transactions (notably the
+// signup pipeline in handleSignupSubmit) can acquire a connection and
+// run users.CreateOnConn + invites.Consume inside one boundary.
+//
+// mailer is taken as an interface so tests can inject mail.FakeMailer.
+func New(cfg *config.Config, pool *sqlitex.Pool, usersStore *users.Store, invitesStore *invites.Store, mailer mail.Mailer, logger *slog.Logger) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -50,12 +59,15 @@ func New(cfg *config.Config, store *users.Store, mailer mail.Mailer, logger *slo
 	e.Renderer = r
 
 	s := &Server{
-		cfg:    cfg,
-		echo:   e,
-		users:  store,
-		mailer: mailer,
-		logger: logger,
-		jwtKey: []byte(cfg.JWTSecret),
+		cfg:      cfg,
+		echo:     e,
+		renderer: r,
+		pool:     pool,
+		users:    usersStore,
+		invites:  invitesStore,
+		mailer:   mailer,
+		logger:   logger,
+		jwtKey:   []byte(cfg.JWTSecret),
 	}
 
 	s.installErrorHandler()
@@ -102,6 +114,8 @@ func (s *Server) installRoutes() {
 	s.echo.GET("/login", s.handleLoginForm)
 	s.echo.POST("/login", s.handleLoginSubmit)
 	s.echo.POST("/logout", s.handleLogout)
+	s.echo.GET("/signup/:token", s.handleSignupForm)
+	s.echo.POST("/signup/:token", s.handleSignupSubmit)
 }
 
 // homeView is the data shape consumed by both home_public.html and
@@ -240,4 +254,166 @@ func (s *Server) clearAuthCookie(c *echo.Context) {
 		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// signupView is the data shape consumed by pages/signup.html.
+type signupView struct {
+	CSRF   string
+	Token  string
+	Email  string
+	Handle string
+	Error  string
+}
+
+// handleSignupForm renders the invite-landing form for a valid token.
+// A missing/expired/consumed token produces an error page; the central
+// error handler maps the invites sentinels to friendly status codes.
+func (s *Server) handleSignupForm(c *echo.Context) error {
+	tok := invites.Token(c.Param("token"))
+	inv, err := s.invites.GetByToken(c.Request().Context(), tok)
+	if err != nil {
+		return err
+	}
+	if inv.Consumed() {
+		return invites.ErrConsumed
+	}
+	if inv.Expired(time.Now().UTC()) {
+		return invites.ErrExpired
+	}
+	return c.Render(http.StatusOK, "pages/signup.html", signupView{
+		CSRF:  csrfToken(c),
+		Token: tok.String(),
+		Email: inv.Email,
+	})
+}
+
+// handleSignupSubmit runs the entire pipeline (token re-validation,
+// email re-check, validators, user insert, invite consumption) inside a
+// single zombiezen sqlitex.Transaction so two parallel form submits
+// cannot both succeed (DESIGN.md §9 step 5).
+func (s *Server) handleSignupSubmit(c *echo.Context) error {
+	tok := invites.Token(c.Param("token"))
+	submittedEmail := users.Normalise(c.FormValue("email"))
+	handle := c.FormValue("handle")
+	password := c.FormValue("password")
+
+	conn, err := s.pool.Take(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	defer s.pool.Put(conn)
+
+	var newUser users.User
+
+	txErr := func() (txErr error) {
+		end := sqlitex.Transaction(conn)
+		defer end(&txErr)
+
+		inv, err := s.invites.GetByTokenOnConn(conn, tok)
+		if err != nil {
+			return err
+		}
+		if inv.Consumed() {
+			return invites.ErrConsumed
+		}
+		if inv.Expired(time.Now().UTC()) {
+			return invites.ErrExpired
+		}
+		if submittedEmail != inv.Email {
+			return errEmailMismatch
+		}
+		if err := auth.ValidateHandle(handle); err != nil {
+			return err
+		}
+		if err := auth.ValidatePassword(password); err != nil {
+			return err
+		}
+		hash, err := auth.Hash(password)
+		if err != nil {
+			return err
+		}
+		u, err := s.users.CreateOnConn(conn, users.NewUser{
+			Handle:       handle,
+			Email:        inv.Email,
+			PasswordHash: hash,
+			IsAdmin:      false,
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.invites.Consume(c.Request().Context(), conn, tok); err != nil {
+			return err
+		}
+		newUser = u
+		return nil
+	}()
+
+	if txErr != nil {
+		return s.renderSignupFailure(c, tok.String(), submittedEmail, handle, txErr)
+	}
+
+	jwtToken, err := auth.Issue(newUser, s.jwtKey, auth.DefaultTokenTTL)
+	if err != nil {
+		return err
+	}
+	s.setAuthCookie(c, jwtToken)
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Redirect", "/")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, "/")
+}
+
+// errEmailMismatch is returned when the form-submitted email differs
+// from the email bound to the invite (defence-in-depth against
+// tampering with the readonly field). Mapped to a form-level error,
+// not an HTTP error.
+var errEmailMismatch = errors.New("server: signup email does not match invite")
+
+// renderSignupFailure re-renders the signup form with a user-facing
+// message for validation/uniqueness errors, and propagates expired or
+// consumed invites to the central error handler.
+func (s *Server) renderSignupFailure(c *echo.Context, token, email, handle string, err error) error {
+	switch {
+	case errors.Is(err, invites.ErrNotFound),
+		errors.Is(err, invites.ErrExpired),
+		errors.Is(err, invites.ErrConsumed):
+		return err
+	}
+
+	view := signupView{
+		CSRF:   csrfToken(c),
+		Token:  token,
+		Email:  email,
+		Handle: handle,
+		Error:  signupErrorMessage(err),
+	}
+	return c.Render(http.StatusUnprocessableEntity, "pages/signup.html", view)
+}
+
+// signupErrorMessage maps a validator/store error to a short message
+// the user can act on. Falls back to a generic message for unexpected
+// errors so we never leak internal details.
+func signupErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, errEmailMismatch):
+		return "Submitted email does not match the invite."
+	case errors.Is(err, auth.ErrPasswordTooShort):
+		return fmt.Sprintf("Password must be at least %d characters.", auth.MinPasswordLen)
+	case errors.Is(err, auth.ErrPasswordTooLong):
+		return fmt.Sprintf("Password must be at most %d characters.", auth.MaxPasswordLen)
+	case errors.Is(err, auth.ErrPasswordNotPrintable):
+		return "Password contains a non-printable character."
+	case errors.Is(err, auth.ErrHandleTooShort),
+		errors.Is(err, auth.ErrHandleTooLong),
+		errors.Is(err, auth.ErrHandleBadFirstChar),
+		errors.Is(err, auth.ErrHandleBadChar):
+		return "Handle must be 3–32 characters, start with a lowercase letter, and use only lowercase letters, digits, and _ , . ' -"
+	case errors.Is(err, users.ErrHandleTaken):
+		return "That handle is already taken."
+	case errors.Is(err, users.ErrEmailTaken):
+		return "That email is already in use."
+	}
+	return "Could not create account. Please try again."
 }
