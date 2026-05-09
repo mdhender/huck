@@ -172,7 +172,7 @@ pass and a commit lands on `main`.
   (fake mailer round-trip); the real Mailgun integration test stub
   exists with `t.Skip("TODO(sprint-3): wire HUCK_TEST_MAILGUN_*")`.
 
-- [x] **T4 — `internal/invites` package.**
+- [x] **T4 — `internal/invites` package.** ✅ `ae7556a`
   `Token` type with `Generate() (Token, error)` (32 bytes from
   `crypto/rand`, base64url). `Invite` model. `Store` methods:
   - `Create(ctx, email string, invitedBy int64) (Invite, error)` —
