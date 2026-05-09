@@ -8,7 +8,7 @@ tmp_dir = "tmp"
 [build]
   cmd = "go build -o ./dist/local/huck ./cmd/huck"
   bin = "./dist/local/huck"
-  args_bin = ["serve", "--addr", ":9797"]
+  args_bin = ["serve", "--addr", ":9797", "--base-url", "http://localhost:9797"]
   delay = 1000
   include_dir = ["cmd", "internal", "migrations", "web"]
   include_ext = ["go", "html", "sql"]
