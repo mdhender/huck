@@ -157,7 +157,8 @@ Bound with `ff.WithEnvVarPrefix("HUCK")` and (optionally)
 | `--cookie-domain`   | `HUCK_COOKIE_DOMAIN`    | no       | —          | Optional cookie `Domain` attribute.         |
 | `--mailgun-domain`  | `HUCK_MAILGUN_DOMAIN`   | yes      | —          | Mailgun sending domain.                     |
 | `--mailgun-api-key` | `HUCK_MAILGUN_API_KEY`  | yes      | —          | Mailgun private API key.                    |
-| `--mailgun-from`    | `HUCK_MAILGUN_FROM`     | yes      | —          | `From:` address used for invite mail.       |
+| `--mailgun-from`    | `HUCK_MAILGUN_FROM`     | yes      | —          | `From:` address used for invite mail (RFC 5322 string, e.g. `huck <a@b>`). |
+| `--mailgun-api-base`| `HUCK_MAILGUN_API_BASE` | no       | —          | Mailgun API base URL. Empty = SDK default (US). Set to `https://api.eu.mailgun.net/v3` for EU. |
 | `--log-level`       | `HUCK_LOG_LEVEL`        | no       | `info`     | `debug`/`info`/`warn`/`error`.              |
 
 Required flags missing on `serve` cause a fatal error before the listener
@@ -218,8 +219,9 @@ CREATE TABLE invites (
     expires_at   TEXT NOT NULL,               -- = created_at + 7d
     consumed_at  TEXT                          -- NULL until used
 );
-CREATE INDEX invites_email_active
+CREATE UNIQUE INDEX invites_email_active
     ON invites(email) WHERE consumed_at IS NULL;
+-- One active invite per email; admin must revoke before re-inviting.
 
 CREATE TABLE schema_migrations (
     version    INTEGER PRIMARY KEY,
@@ -293,6 +295,39 @@ request, so handlers do not need per-form tokens.
 - `RequireAdmin` — wraps `RequireAuth` and additionally checks
   `claims.Admin == true`, returning 403 otherwise.
 
+### 8.7 Password policy
+
+A single policy applies wherever a password is accepted (`huck admin
+create`, `POST /signup/:token`, future password-change endpoints):
+
+- **Length:** ≥12 and ≤128 characters.
+- **Character set:** any printable Unicode, including spaces. No
+  character-class requirements (no forced digits/symbols/case mix).
+- **Storage:** bcrypt only (`golang.org/x/crypto/bcrypt`, cost 12).
+  Plaintext is never logged or returned.
+- **Login rate limiting:** basic per-handle + per-IP throttle on
+  `POST /login` to slow online guessing. (`zxcvbn` strength scoring is
+  optional and explicitly **not** an MVP blocker.)
+
+The validator lives in `internal/auth` so the CLI and the HTTP layer
+share it; failures return clear messages naming the rule that failed
+(too short / too long / non-printable character).
+
+### 8.8 Handle policy
+
+Handles are case-folded to lowercase before validation and storage
+(see [§7.4](#74-initial-schema-0001_initsql)). The validator accepts:
+
+```
+^[a-z][a-z0-9_,.'-]{2,31}$
+```
+
+— a leading lowercase letter, followed by 2–31 characters drawn from
+lowercase ASCII letters, digits, and the punctuation set `_ , . ' -`.
+Total length 3–32. Anything outside this set is rejected; the rule
+deliberately excludes characters that complicate URL encoding or HTML
+contexts.
+
 ## 9. Invite flow
 
 ```diagram
@@ -315,20 +350,43 @@ request, so handlers do not need per-form tokens.
 
 1. **Create.** `POST /admin/invites {email}`. Server lowercases the email,
    generates a 32-byte token (base64url), inserts a row with
-   `expires_at = now+7d`, and sends an email containing
-   `${BASE_URL}/signup/<token>`.
+   `expires_at = now+7d`, and sends an email whose body links to
+   `${BASE_URL}/signup/<token>?email=<urlencoded-email>`. The
+   `email` query string is a UX aid only — it pre-fills the read-only
+   field on the signup form so the recipient can see which address the
+   invite is bound to. The token alone is the security boundary; the
+   email is re-validated server-side against the invite row.
+   The unique partial index `invites_email_active` enforces "one
+   active invite per email"; if an unconsumed invite exists for the
+   same address, the create endpoint returns a 409 and the admin must
+   resend or revoke the existing one.
 2. **Resend.** `POST /admin/invites/:token/resend`. Allowed only if the
    invite exists and is not consumed. Updates `expires_at = now+7d`
    (regardless of prior expiry) and re-sends the same link.
 3. **Revoke.** `POST /admin/invites/:token/revoke`. Deletes the row.
 4. **Landing.** `GET /signup/:token` validates that the token exists, is
-   not consumed, and is not expired. Renders a form with the email
-   pre-filled and read-only.
-5. **Submit.** `POST /signup/:token` re-validates the token, requires the
-   submitted email to equal (case-insensitively) the invite email, checks
-   handle uniqueness, enforces password strength, creates the user with
-   `is_admin = 0`, marks the invite `consumed_at = now`, sets the auth
-   cookie, and redirects to `/`.
+   not consumed, and is not expired. Renders a form whose fields are:
+   - `email` — pre-filled from the invite row and rendered as a
+     **visible, `readonly`** input. The user can see (and copy) the
+     address the invite is bound to, but cannot edit it. The field
+     submits with the form, giving the server a defence-in-depth value
+     to re-check against the invite row.
+   - `handle` — validated against the [§8.8 handle policy](#88-handle-policy)
+     and against handle-uniqueness.
+   - `password` — validated against the [§8.7 password policy](#87-password-policy).
+5. **Submit.** `POST /signup/:token` performs everything inside **one
+   SQLite transaction**:
+   1. Re-validate the token (exists, not consumed, not expired).
+   2. Re-validate that the submitted email equals the invite email
+      (case-insensitively, defence against form tampering).
+   3. Validate handle and password against §8.7 / §8.8.
+   4. `INSERT INTO users (..., is_admin = 0)`.
+   5. `UPDATE invites SET consumed_at = now WHERE token = ?`.
+   6. Commit.
+
+   Then issue the JWT, set the auth cookie, and redirect to `/`. The
+   transaction guarantees that two parallel form submits cannot both
+   succeed (handle-uniqueness or invite-consumed will fail one of them).
 
 Token entropy: 32 bytes from `crypto/rand` → ~256 bits → not guessable.
 Tokens are stored as-is (they are random, not secret in the sense of
@@ -448,8 +506,15 @@ Handlers return `error`; the global error handler does the rendering.
 
 Uses `log/slog` with the level controlled by `--log-level`. Echo's
 `middleware.RequestLogger` is configured with `LogValuesFunc` that calls
-into slog so all logs share a format. No password material, JWTs, or
-invite tokens are ever logged.
+into slog so all logs share a format.
+
+**Sensitive values** — passwords, JWTs, and invite tokens — must not
+appear in logs. This is enforced by **discipline and code review**, not
+by an automated filter: the threat model assumes operators (and only
+operators) read logs, and the worst-case exposure is small (see §1).
+Reviewers should reject log statements that pass these values directly,
+and types that wrap secrets are encouraged to define a `LogValue() slog.Value`
+that returns a redacted representation.
 
 ## 15. Testing strategy
 
