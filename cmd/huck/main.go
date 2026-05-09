@@ -118,7 +118,7 @@ func newServeCmd(cfg *config.Config, stderr io.Writer, parent *ff.FlagSet) *ff.C
 	fs.StringVar(&cfg.MailgunDomain, 0, "mailgun-domain", "", "Mailgun sending domain")
 	fs.StringVar(&cfg.MailgunAPIKey, 0, "mailgun-api-key", "", "Mailgun API key")
 	fs.StringVar(&cfg.MailgunFrom, 0, "mailgun-from", "", "From: address for invite mail (RFC 5322 string)")
-	fs.StringVar(&cfg.MailgunAPIBase, 0, "mailgun-api-base", "", "Mailgun API base URL; empty = SDK default (US). EU example: https://api.eu.mailgun.net/v3")
+	fs.StringVar(&cfg.MailgunAPIBase, 0, "mailgun-api-base", "", "Mailgun API base URL (without version suffix); empty = SDK default (US). EU example: https://api.eu.mailgun.net")
 
 	cmd := &ff.Command{
 		Name:      "serve",

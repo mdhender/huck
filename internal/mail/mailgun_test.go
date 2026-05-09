@@ -22,8 +22,11 @@ func TestMailgunMailerNewValidation(t *testing.T) {
 		{"missing from", mail.MailgunConfig{Domain: "d", APIKey: "k"}, true},
 		{"all set", mail.MailgunConfig{Domain: "d", APIKey: "k", From: "f"}, false},
 		{"all set + EU base", mail.MailgunConfig{
-			Domain: "d", APIKey: "k", From: "f", APIBase: "https://api.eu.mailgun.net/v3",
+			Domain: "d", APIKey: "k", From: "f", APIBase: "https://api.eu.mailgun.net",
 		}, false},
+		{"api-base with version suffix is rejected by SDK", mail.MailgunConfig{
+			Domain: "d", APIKey: "k", From: "f", APIBase: "https://api.eu.mailgun.net/v3",
+		}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

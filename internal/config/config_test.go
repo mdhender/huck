@@ -75,7 +75,7 @@ func TestValidateServe(t *testing.T) {
 			name: "ok with mailgun-api-base set (EU host)",
 			cfg: func() Config {
 				c := complete
-				c.MailgunAPIBase = "https://api.eu.mailgun.net/v3"
+				c.MailgunAPIBase = "https://api.eu.mailgun.net"
 				return c
 			}(),
 		},

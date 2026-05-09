@@ -43,7 +43,7 @@ should update this document first.
 | JWT primitives  | `github.com/golang-jwt/jwt/v5`                |
 | SQLite          | `zombiezen.com/go/sqlite` + `…/sqlitex`       |
 | Flags/commands  | `github.com/peterbourgon/ff/v4`               |
-| Email           | `github.com/mailgun/mailgun-go/v4`            |
+| Email           | `github.com/mailgun/mailgun-go/v5`            |
 | Password hash   | `golang.org/x/crypto/bcrypt` (cost 12)        |
 | Templates       | stdlib `html/template`                        |
 | Frontend assets | HTMX, AlpineJS, Pico.css (vendored in `web/static`) |
@@ -158,7 +158,7 @@ Bound with `ff.WithEnvVarPrefix("HUCK")` and (optionally)
 | `--mailgun-domain`  | `HUCK_MAILGUN_DOMAIN`   | yes      | —          | Mailgun sending domain.                     |
 | `--mailgun-api-key` | `HUCK_MAILGUN_API_KEY`  | yes      | —          | Mailgun private API key.                    |
 | `--mailgun-from`    | `HUCK_MAILGUN_FROM`     | yes      | —          | `From:` address used for invite mail (RFC 5322 string, e.g. `huck <a@b>`). |
-| `--mailgun-api-base`| `HUCK_MAILGUN_API_BASE` | no       | —          | Mailgun API base URL. Empty = SDK default (US). Set to `https://api.eu.mailgun.net/v3` for EU. |
+| `--mailgun-api-base`| `HUCK_MAILGUN_API_BASE` | no       | —          | Mailgun API base URL (no version suffix; mailgun-go/v5 rejects one). Empty = SDK default (US). Set to `https://api.eu.mailgun.net` for EU. |
 | `--log-level`       | `HUCK_LOG_LEVEL`        | no       | `info`     | `debug`/`info`/`warn`/`error`.              |
 
 Required flags missing on `serve` cause a fatal error before the listener

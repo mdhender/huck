@@ -30,7 +30,7 @@ file covers sprint-specific scope, sequencing, and hazards.
   time.
 
 - `internal/mail` — `Mailer` interface plus a Mailgun implementation
-  using `github.com/mailgun/mailgun-go/v4`. A no-op/fake `Mailer` for
+  using `github.com/mailgun/mailgun-go/v5`. A no-op/fake `Mailer` for
   tests. The Mailgun impl calls `mg.SetAPIBase(cfg.MailgunAPIBase)`
   only when the value is non-empty, so US users (the default) need not
   set it. Calls are **synchronous**: a Mailgun failure on
@@ -78,7 +78,8 @@ file covers sprint-specific scope, sequencing, and hazards.
   `--mailgun-domain`, `--mailgun-api-key`, `--mailgun-from`, and
   `--base-url` (the Sprint 1 grace period ends). Add an *optional*
   `--mailgun-api-base` / `HUCK_MAILGUN_API_BASE` flag for EU customers
-  (e.g. `https://api.eu.mailgun.net/v3`); empty value means "use the
+  (e.g. `https://api.eu.mailgun.net` — mailgun-go/v5 rejects a
+  version suffix on the base URL); empty value means "use the
   SDK default", which is US.
 
 ## Out of scope (likely Sprint 3+)
@@ -162,7 +163,7 @@ pass and a commit lands on `main`.
 - [x] **T3 — `internal/mail` package.** ✅ `b353b3f`
   `Mailer` interface: `Send(ctx context.Context, to, subject, htmlBody string) error`.
   `FakeMailer` (records sent messages, used by tests).
-  `MailgunMailer` impl using `github.com/mailgun/mailgun-go/v4`; calls
+  `MailgunMailer` impl using `github.com/mailgun/mailgun-go/v5`; calls
   `mg.SetAPIBase(cfg.MailgunAPIBase)` only when non-empty. Wire the
   chosen `Mailer` into `server.New` (interface dependency, not a
   concrete type) so the server-test can inject the fake. Do *not*
