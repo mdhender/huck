@@ -133,7 +133,7 @@ Worked one-at-a-time with a fresh context per task. See "How to pick up
 a task" below. Mark a task with `[x]` when its acceptance criteria
 pass and a commit lands on `main`.
 
-- [x] **T1 — Auth validators + admin create.**
+- [x] **T1 — Auth validators + admin create.** ✅ `650b599`
   Add `internal/auth/validate.go` (or split into `password.go`
   additions + new `handle.go`) with:
   - `ValidatePassword(pw string) error` enforcing §8.7 (length 12–128,
