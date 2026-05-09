@@ -1,0 +1,26 @@
+{{ define "title" }}huck — welcome{{ end }}
+
+{{ define "content" }}
+<header>
+    <nav>
+        <ul>
+            <li><strong>huck</strong></li>
+        </ul>
+        <ul>
+            <li>signed in as <em>{{ .Handle }}</em></li>
+            {{ if .Admin }}<li><a href="/admin">Admin</a></li>{{ end }}
+            <li>
+                <form class="inline" method="post" action="/logout">
+                    <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+                    <button type="submit" class="secondary">Sign out</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+<article>
+    <h1>welcome to huck, {{ .Handle }}</h1>
+    <p>You are signed in. There isn't much here yet — Sprint 2 will add invites and an admin console.</p>
+</article>
+{{ end }}

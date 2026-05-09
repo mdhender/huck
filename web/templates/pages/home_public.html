@@ -1,0 +1,26 @@
+{{ define "title" }}huck — what is huck?{{ end }}
+
+{{ define "content" }}
+<header>
+    <hgroup>
+        <h1>huck</h1>
+        <p>A small, self-hosted web app for &lt;50 people.</p>
+    </hgroup>
+</header>
+
+<article>
+    <h2>What is huck?</h2>
+    <p>
+        huck is a single-binary, server-rendered web app. It runs against a
+        single SQLite file, uses HTMX for partial updates, and AlpineJS for
+        small client-side interactions.
+    </p>
+    <p>
+        Registration is invite-only — there is no public sign-up. If you
+        already have an account, sign in below.
+    </p>
+    <p>
+        <a href="/login" role="button">Sign in</a>
+    </p>
+</article>
+{{ end }}

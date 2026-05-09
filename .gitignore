@@ -1,0 +1,28 @@
+# Build artifacts
+/huck
+/dist/
+
+# Go
+*.exe
+*.test
+*.out
+/go.work.sum
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# agents
+.amp/
+.claude/
+.codex/
+
+# environment files
+.env.local
+.env.*.local

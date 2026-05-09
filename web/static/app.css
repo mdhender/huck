@@ -1,0 +1,9 @@
+/* huck-specific style overrides.
+ * Loaded after pico.min.css. Prefer semantic selectors over utility classes.
+ */
+
+/* Inline logout form on the authed home page. */
+form.inline {
+    display: inline;
+}
+

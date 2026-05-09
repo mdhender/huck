@@ -1,0 +1,11 @@
+{{ define "title" }}huck — error{{ end }}
+
+{{ define "content" }}
+<header>
+    <h1>{{ .Status }} {{ .StatusText }}</h1>
+</header>
+<article>
+    <p>{{ .Message }}</p>
+    <p><a href="/">Return home</a></p>
+</article>
+{{ end }}
