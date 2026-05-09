@@ -27,6 +27,7 @@ import (
 	"github.com/mdhender/huck/internal/config"
 	"github.com/mdhender/huck/internal/db"
 	"github.com/mdhender/huck/internal/dotenv"
+	"github.com/mdhender/huck/internal/mail"
 	"github.com/mdhender/huck/internal/server"
 	"github.com/mdhender/huck/internal/users"
 )
@@ -151,7 +152,16 @@ func runServe(ctx context.Context, cfg *config.Config, _ io.Writer) error {
 	}
 
 	store := users.NewStore(pool)
-	srv, err := server.New(cfg, store, logger)
+	mailer, err := mail.NewMailgunMailer(mail.MailgunConfig{
+		Domain:  cfg.MailgunDomain,
+		APIKey:  cfg.MailgunAPIKey,
+		From:    cfg.MailgunFrom,
+		APIBase: cfg.MailgunAPIBase,
+	})
+	if err != nil {
+		return err
+	}
+	srv, err := server.New(cfg, store, mailer, logger)
 	if err != nil {
 		return err
 	}

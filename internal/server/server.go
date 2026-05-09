@@ -15,6 +15,7 @@ import (
 
 	"github.com/mdhender/huck/internal/auth"
 	"github.com/mdhender/huck/internal/config"
+	"github.com/mdhender/huck/internal/mail"
 	"github.com/mdhender/huck/internal/users"
 	"github.com/mdhender/huck/web"
 )
@@ -25,6 +26,7 @@ type Server struct {
 	cfg    *config.Config
 	echo   *echo.Echo
 	users  *users.Store
+	mailer mail.Mailer
 	logger *slog.Logger
 
 	jwtKey []byte
@@ -32,7 +34,10 @@ type Server struct {
 
 // New returns an Echo instance fully configured with middleware, routes,
 // and the renderer. The caller drives the lifecycle (Start/Shutdown).
-func New(cfg *config.Config, store *users.Store, logger *slog.Logger) (*Server, error) {
+//
+// mailer is taken as an interface so tests can inject mail.FakeMailer;
+// no Sprint 2 handler calls it yet (T6 wires the admin invite POSTs).
+func New(cfg *config.Config, store *users.Store, mailer mail.Mailer, logger *slog.Logger) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -48,6 +53,7 @@ func New(cfg *config.Config, store *users.Store, logger *slog.Logger) (*Server, 
 		cfg:    cfg,
 		echo:   e,
 		users:  store,
+		mailer: mailer,
 		logger: logger,
 		jwtKey: []byte(cfg.JWTSecret),
 	}

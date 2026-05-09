@@ -14,6 +14,7 @@ import (
 	"github.com/mdhender/huck/internal/auth"
 	"github.com/mdhender/huck/internal/config"
 	"github.com/mdhender/huck/internal/db"
+	"github.com/mdhender/huck/internal/mail"
 	"github.com/mdhender/huck/internal/server"
 	"github.com/mdhender/huck/internal/users"
 )
@@ -54,7 +55,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 		JWTSecret:    strings.Repeat("k", 32),
 		CookieSecure: false, // httptest is plain HTTP
 	}
-	srv, err := server.New(cfg, store, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv, err := server.New(cfg, store, mail.NewFakeMailer(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
@@ -210,7 +211,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *jarHelper, *http.Client) {
 		JWTSecret:    strings.Repeat("k", 32),
 		CookieSecure: false,
 	}
-	srv, err := server.New(cfg, store, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv, err := server.New(cfg, store, mail.NewFakeMailer(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}

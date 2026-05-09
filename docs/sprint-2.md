@@ -159,7 +159,7 @@ pass and a commit lands on `main`.
   without the now-required flags fails fast with a list naming each
   missing flag; `--mailgun-api-base` shows up in `huck serve --help`.
 
-- [ ] **T3 — `internal/mail` package.**
+- [x] **T3 — `internal/mail` package.**
   `Mailer` interface: `Send(ctx context.Context, to, subject, htmlBody string) error`.
   `FakeMailer` (records sent messages, used by tests).
   `MailgunMailer` impl using `github.com/mailgun/mailgun-go/v4`; calls
