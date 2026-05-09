@@ -149,7 +149,7 @@ pass and a commit lands on `main`.
   passes; `huck admin create` rejects passwords <12 or >128 with a
   clear message; existing Sprint 1 tests still pass.
 
-- [ ] **T2 — Config: promote Mailgun + base-url; add api-base.**
+- [x] **T2 — Config: promote Mailgun + base-url; add api-base.**
   In `internal/config/config.go`: add `MailgunAPIBase string`. In
   `cmd/huck/main.go:newServeCmd`: register `--mailgun-api-base`. In
   `Config.ValidateServe`: require `--mailgun-domain`,

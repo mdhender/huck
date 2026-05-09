@@ -8,24 +8,76 @@ import (
 func TestValidateServe(t *testing.T) {
 	t.Parallel()
 
+	complete := Config{
+		DB:            "x.db",
+		JWTSecret:     strings.Repeat("a", 32),
+		BaseURL:       "https://huck.example",
+		MailgunDomain: "mg.example.com",
+		MailgunAPIKey: "key-123",
+		MailgunFrom:   "huck <noreply@example.com>",
+	}
+
 	cases := []struct {
-		name    string
-		cfg     Config
-		wantErr string
+		name        string
+		cfg         Config
+		wantErr     string
+		wantMissing []string
 	}{
 		{
-			name:    "missing db and jwt",
+			name:    "empty config names every required flag",
 			cfg:     Config{},
 			wantErr: "missing required flag",
+			wantMissing: []string{
+				"--db", "--jwt-secret", "--base-url",
+				"--mailgun-domain", "--mailgun-api-key", "--mailgun-from",
+			},
 		},
 		{
-			name:    "short jwt secret",
-			cfg:     Config{DB: "x.db", JWTSecret: "short"},
+			name: "missing only base-url",
+			cfg: func() Config {
+				c := complete
+				c.BaseURL = ""
+				return c
+			}(),
+			wantErr:     "missing required flag",
+			wantMissing: []string{"--base-url"},
+		},
+		{
+			name: "missing the mailgun trio",
+			cfg: func() Config {
+				c := complete
+				c.MailgunDomain = ""
+				c.MailgunAPIKey = ""
+				c.MailgunFrom = ""
+				return c
+			}(),
+			wantErr:     "missing required flag",
+			wantMissing: []string{"--mailgun-domain", "--mailgun-api-key", "--mailgun-from"},
+		},
+		{
+			name: "short jwt secret reported after presence checks",
+			cfg: func() Config {
+				c := complete
+				c.JWTSecret = "short"
+				return c
+			}(),
 			wantErr: "at least 32 bytes",
 		},
 		{
-			name: "ok with empty mailgun",
-			cfg:  Config{DB: "x.db", JWTSecret: strings.Repeat("a", 32)},
+			name: "ok when every required flag is set",
+			cfg:  complete,
+		},
+		{
+			name: "ok with mailgun-api-base left empty (optional)",
+			cfg:  complete,
+		},
+		{
+			name: "ok with mailgun-api-base set (EU host)",
+			cfg: func() Config {
+				c := complete
+				c.MailgunAPIBase = "https://api.eu.mailgun.net/v3"
+				return c
+			}(),
 		},
 	}
 
@@ -40,6 +92,11 @@ func TestValidateServe(t *testing.T) {
 			}
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("want err containing %q, got %v", tc.wantErr, err)
+			}
+			for _, flag := range tc.wantMissing {
+				if !strings.Contains(err.Error(), flag) {
+					t.Errorf("want err to mention %q, got %v", flag, err)
+				}
 			}
 		})
 	}

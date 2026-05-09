@@ -110,13 +110,14 @@ func newServeCmd(cfg *config.Config, stderr io.Writer, parent *ff.FlagSet) *ff.C
 	fs := ff.NewFlagSet("serve").SetParent(parent)
 	fs.StringVar(&cfg.Addr, 0, "addr", ":8080", "listen address")
 	fs.StringVar(&cfg.DB, 0, "db", "", "path to the SQLite file (must already exist)")
-	fs.StringVar(&cfg.BaseURL, 0, "base-url", "", "public base URL (parsed; unused in Sprint 1)")
+	fs.StringVar(&cfg.BaseURL, 0, "base-url", "", "public base URL, used to build invite links")
 	fs.StringVar(&cfg.JWTSecret, 0, "jwt-secret", "", "HS256 signing key, ≥32 bytes")
 	fs.BoolVarDefault(&cfg.CookieSecure, 0, "cookie-secure", true, "set Secure on the auth cookie")
 	fs.StringVar(&cfg.CookieDomain, 0, "cookie-domain", "", "optional cookie Domain attribute")
-	fs.StringVar(&cfg.MailgunDomain, 0, "mailgun-domain", "", "Mailgun sending domain (parsed; unused in Sprint 1)")
-	fs.StringVar(&cfg.MailgunAPIKey, 0, "mailgun-api-key", "", "Mailgun API key (parsed; unused in Sprint 1)")
-	fs.StringVar(&cfg.MailgunFrom, 0, "mailgun-from", "", "From: address for invite mail (parsed; unused in Sprint 1)")
+	fs.StringVar(&cfg.MailgunDomain, 0, "mailgun-domain", "", "Mailgun sending domain")
+	fs.StringVar(&cfg.MailgunAPIKey, 0, "mailgun-api-key", "", "Mailgun API key")
+	fs.StringVar(&cfg.MailgunFrom, 0, "mailgun-from", "", "From: address for invite mail (RFC 5322 string)")
+	fs.StringVar(&cfg.MailgunAPIBase, 0, "mailgun-api-base", "", "Mailgun API base URL; empty = SDK default (US). EU example: https://api.eu.mailgun.net/v3")
 
 	cmd := &ff.Command{
 		Name:      "serve",

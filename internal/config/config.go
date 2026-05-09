@@ -26,10 +26,11 @@ type Config struct {
 	CookieSecure bool   // --cookie-secure
 	CookieDomain string // --cookie-domain
 
-	// Mail (Mailgun). Parsed but unused in Sprint 1.
-	MailgunDomain string // --mailgun-domain
-	MailgunAPIKey string // --mailgun-api-key
-	MailgunFrom   string // --mailgun-from
+	// Mail (Mailgun). Required by `huck serve` as of Sprint 2.
+	MailgunDomain  string // --mailgun-domain
+	MailgunAPIKey  string // --mailgun-api-key
+	MailgunFrom    string // --mailgun-from
+	MailgunAPIBase string // --mailgun-api-base (empty = SDK default, US)
 
 	// admin create.
 	AdminHandle string // --handle
@@ -41,8 +42,9 @@ type Config struct {
 const MinJWTSecretLen = 32
 
 // ValidateServe is invoked by `huck serve` once flags are parsed.
-// Sprint 1 only requires --db and a sufficiently long --jwt-secret;
-// Mailgun and BaseURL are tolerated empty.
+// Sprint 2 promotes the Mailgun trio and --base-url to required;
+// --mailgun-api-base remains optional (empty means "use the SDK
+// default", which is US).
 func (c *Config) ValidateServe() error {
 	var missing []string
 	if c.DB == "" {
@@ -50,6 +52,18 @@ func (c *Config) ValidateServe() error {
 	}
 	if c.JWTSecret == "" {
 		missing = append(missing, "--jwt-secret")
+	}
+	if c.BaseURL == "" {
+		missing = append(missing, "--base-url")
+	}
+	if c.MailgunDomain == "" {
+		missing = append(missing, "--mailgun-domain")
+	}
+	if c.MailgunAPIKey == "" {
+		missing = append(missing, "--mailgun-api-key")
+	}
+	if c.MailgunFrom == "" {
+		missing = append(missing, "--mailgun-from")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("serve: missing required flag(s): %v", missing)
