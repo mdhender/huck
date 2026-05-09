@@ -1,0 +1,1 @@
+go: HUCK_ENV=development air
