@@ -21,7 +21,11 @@ CREATE TABLE invites (
     expires_at   TEXT NOT NULL,                -- = created_at + 7d
     consumed_at  TEXT                          -- NULL until used
 );
-CREATE INDEX invites_email_active
+-- Enforces "one active invite per email": admins must delete or
+-- consume the existing invite before creating another for the same
+-- address. Resend reuses the existing row, so this constraint does
+-- not block legitimate workflows.
+CREATE UNIQUE INDEX invites_email_active
     ON invites(email) WHERE consumed_at IS NULL;
 
 CREATE TABLE schema_migrations (
