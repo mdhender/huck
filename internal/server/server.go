@@ -130,7 +130,6 @@ type homeView struct {
 	Authed bool
 	Handle string
 	Admin  bool
-	CSRF   string
 }
 
 // handleAdminIndex is the GET /admin landing. The home page's "Admin"
@@ -144,7 +143,7 @@ func (s *Server) handleAdminIndex(c *echo.Context) error {
 // home_authed.html for authenticated ones. Best-effort auth: an
 // invalid/missing/expired cookie just means anonymous, never 401.
 func (s *Server) handleHome(c *echo.Context) error {
-	view := homeView{CSRF: csrfToken(c)}
+	var view homeView
 
 	if claims, ok := s.bestEffortClaims(c); ok {
 		view.Authed = true
@@ -169,20 +168,8 @@ func (s *Server) bestEffortClaims(c *echo.Context) (*auth.Claims, bool) {
 	return claims, true
 }
 
-// csrfToken extracts the token Echo's CSRF middleware just put in the
-// context, falling back to "" if the middleware was somehow skipped.
-func csrfToken(c *echo.Context) string {
-	if v := c.Get("csrf"); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
 // loginView is the data shape consumed by pages/login.html.
 type loginView struct {
-	CSRF   string
 	Handle string
 	Error  string
 }
@@ -191,7 +178,7 @@ func (s *Server) handleLoginForm(c *echo.Context) error {
 	if _, ok := s.bestEffortClaims(c); ok {
 		return c.Redirect(http.StatusSeeOther, "/")
 	}
-	return c.Render(http.StatusOK, "pages/login.html", loginView{CSRF: csrfToken(c)})
+	return c.Render(http.StatusOK, "pages/login.html", loginView{})
 }
 
 func (s *Server) handleLoginSubmit(c *echo.Context) error {
@@ -227,7 +214,6 @@ func (s *Server) handleLoginSubmit(c *echo.Context) error {
 
 func (s *Server) renderLoginFailure(c *echo.Context, handle string) error {
 	return c.Render(http.StatusUnauthorized, "pages/login.html", loginView{
-		CSRF:   csrfToken(c),
 		Handle: users.Normalise(handle),
 		Error:  "Unknown handle or wrong password.",
 	})
@@ -271,7 +257,6 @@ func (s *Server) clearAuthCookie(c *echo.Context) {
 
 // signupView is the data shape consumed by pages/signup.html.
 type signupView struct {
-	CSRF   string
 	Token  string
 	Email  string
 	Handle string
@@ -294,7 +279,6 @@ func (s *Server) handleSignupForm(c *echo.Context) error {
 		return invites.ErrExpired
 	}
 	return c.Render(http.StatusOK, "pages/signup.html", signupView{
-		CSRF:  csrfToken(c),
 		Token: tok.String(),
 		Email: inv.Email,
 	})
@@ -396,7 +380,6 @@ func (s *Server) renderSignupFailure(c *echo.Context, token, email, handle strin
 	}
 
 	view := signupView{
-		CSRF:   csrfToken(c),
 		Token:  token,
 		Email:  email,
 		Handle: handle,

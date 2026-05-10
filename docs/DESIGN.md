@@ -282,12 +282,60 @@ authenticate without depending on a cookie jar.
 empty value) and redirects (or returns 204 for HTMX). Pure stateless —
 this matches the agreed "rotate `--jwt-secret` to mass-invalidate" model.
 
-### 8.5 CSRF
+### 8.5 CSRF / cross-origin request protection
 
-Echo's `middleware.CSRF()` is mounted with the double-submit cookie
-pattern. A small AlpineJS snippet hooks `htmx:configRequest` and copies
-the CSRF cookie value into the `X-CSRF-Token` header on every HTMX
-request, so handlers do not need per-form tokens.
+Cross-origin write protection is provided by the stdlib's
+[`net/http.CrossOriginProtection`][cop] (Go 1.25+), mounted as an Echo
+middleware in `internal/server.installMiddleware`. It rejects
+state-changing browser requests whose `Sec-Fetch-Site` or `Origin`
+headers identify them as cross-origin; safe methods (GET/HEAD/OPTIONS)
+and non-browser requests pass through. Huck is single-origin in
+production, so `AddTrustedOrigin` is not used.
+
+[cop]: https://pkg.go.dev/net/http#CrossOriginProtection
+
+The older double-submit `_csrf` cookie / `X-CSRF-Token` header /
+hidden form field plumbing is **deliberately removed** (sprint-3 T3.1
+and T3.2). Do not reintroduce it: the stdlib check is the single
+source of truth, and an extra token mechanism only adds form/template
+weight without strengthening the guarantee.
+
+Defence in depth comes from three layers around the `auth` JWT cookie:
+
+1. `SameSite=Lax` on the cookie (set in `Server.setAuthCookie`,
+   §8.1), which keeps the cookie off cross-site POST/iframe nav.
+2. `http.CrossOriginProtection`, which rejects state-changing
+   browser requests that arrive from a different origin even if a
+   `SameSite=Lax` exception would otherwise let the cookie ride along.
+3. HSTS (§12) once `--cookie-secure` is on, eliminating the
+   downgrade-to-HTTP attack on the SameSite/cross-origin checks.
+
+Per Alex Edwards' analysis of `http.CrossOriginProtection`
+(<https://www.alexedwards.net/blog/preventing-csrf-in-go>), the
+middleware is most effective when the application requires both
+**HTTPS** and **TLS 1.3 or later**. The TLS-1.3 floor narrows the
+residual CSRF window to roughly "Firefox v60–69 + a small set of
+non-major browsers"; older browsers without `Sec-Fetch-Site` /
+`Origin` enforcement are refused at the TLS layer.
+
+Huck's deployment contract:
+
+- **Production:** Nginx terminates TLS in front of the Go process and
+  is configured with `ssl_protocols TLSv1.3;` (no TLSv1.2 fallback).
+  See §12 for the relevant snippet. The Go listener only ever speaks
+  plaintext to the local Nginx, so no TLS-1.3 enforcement is needed
+  inside the binary.
+- **Local dev / `huck serve` direct:** out of scope for the TLS-1.3
+  contract. Dev runs on `localhost`, which browsers treat as a Secure
+  Context regardless of HTTPS (so `Sec-Fetch-Site` is still emitted);
+  the slightly larger residual window is accepted in exchange for an
+  HTTP-only dev loop.
+
+**Open question (sprint-3 T3.2):** confirm before closing the sprint
+that the production Nginx config we plan to ship pins
+`ssl_protocols TLSv1.3;`. If TLS 1.3 cannot be enforced at Nginx,
+record the wider residual risk in this section and rely more heavily
+on `SameSite=Lax` + HSTS.
 
 ### 8.6 Authorisation guards
 
@@ -489,6 +537,22 @@ Set on every response:
 expressions can require it; we will tighten this if it proves
 unnecessary.)
 
+### 12.1 Production TLS
+
+The Go listener serves plaintext HTTP to a local Nginx; Nginx
+terminates TLS to the public internet. Nginx must be configured to
+require TLS 1.3 so that the `Sec-Fetch-Site` / `Origin`-based check
+in §8.5 has the strongest residual-risk profile. A minimal snippet:
+
+```nginx
+ssl_protocols TLSv1.3;
+ssl_prefer_server_ciphers off;
+```
+
+If a deployment cannot enforce TLS 1.3 at Nginx, note it in the
+deployment runbook and rely more heavily on the `SameSite=Lax` + HSTS
+combination described in §8.5.
+
 ## 13. Error handling
 
 A central `internal/server/errors.go` maps Go errors to HTTP responses:
@@ -536,3 +600,8 @@ design.
 - **2026-05-09** — Accepted. Initial design (Pico.css for styling;
   `GET /` renders public vs. authed pages without redirect; `/signup/:token`
   is the only registration entry point).
+- **2026-05-10** — §8.5 rewritten for `http.CrossOriginProtection`
+  (sprint-3 T3.1 / T3.2): double-submit `_csrf` plumbing removed,
+  defence-in-depth now relies on `SameSite=Lax` + cross-origin
+  middleware + HSTS, and the production TLS-1.3 / Nginx contract is
+  captured in §12.1.

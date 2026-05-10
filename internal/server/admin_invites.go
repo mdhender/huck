@@ -28,12 +28,10 @@ type inviteRowView struct {
 	ExpiresAt    string
 	ExpiresAtISO string
 	CanResend    bool
-	CSRF         string
 }
 
 // adminInvitesView is the data shape consumed by pages/admin_invites.html.
 type adminInvitesView struct {
-	CSRF      string
 	Handle    string
 	FormEmail string
 	Error     string
@@ -59,7 +57,6 @@ func (s *Server) handleAdminInvitesList(c *echo.Context) error {
 		return err
 	}
 	return c.Render(http.StatusOK, "pages/admin_invites.html", adminInvitesView{
-		CSRF:   csrfToken(c),
 		Handle: claims.Handle,
 		Rows:   rows,
 	})
@@ -122,7 +119,6 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 		return err
 	}
 	return c.Render(http.StatusOK, "pages/admin_invites.html", adminInvitesView{
-		CSRF:   csrfToken(c),
 		Handle: claims.Handle,
 		Notice: fmt.Sprintf("Invite sent to %s.", created.Email),
 		Rows:   rows,
@@ -150,7 +146,7 @@ func (s *Server) handleAdminInvitesResend(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadGateway, "Resend failed at the mail provider.")
 	}
 	if c.Request().Header.Get("HX-Request") == "true" {
-		return c.Render(http.StatusOK, "partials/invite_row.html", rowView(inv, csrfToken(c)))
+		return c.Render(http.StatusOK, "partials/invite_row.html", rowView(inv))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/invites")
 }
@@ -176,7 +172,6 @@ func (s *Server) renderAdminInvitesError(c *echo.Context, claims *auth.Claims, e
 		return err
 	}
 	return c.Render(status, "pages/admin_invites.html", adminInvitesView{
-		CSRF:      csrfToken(c),
 		Handle:    claims.Handle,
 		FormEmail: email,
 		Error:     msg,
@@ -186,17 +181,16 @@ func (s *Server) renderAdminInvitesError(c *echo.Context, claims *auth.Claims, e
 
 // loadInviteRows fetches every invite via the store and decorates each
 // one with the display fields the templates need (Status, formatted
-// times, CSRF token, can-resend gate).
+// times, can-resend gate).
 func (s *Server) loadInviteRows(c *echo.Context) ([]inviteRowView, error) {
 	all, err := s.invites.ListAll(c.Request().Context())
 	if err != nil {
 		return nil, err
 	}
-	csrf := csrfToken(c)
 	now := time.Now().UTC()
 	out := make([]inviteRowView, 0, len(all))
 	for _, inv := range all {
-		out = append(out, rowViewAt(inv, csrf, now))
+		out = append(out, rowViewAt(inv, now))
 	}
 	return out, nil
 }
@@ -212,11 +206,11 @@ func (s *Server) signupURL(inv invites.Invite) string {
 
 // rowView is rowViewAt with time.Now() supplied; convenient for callers
 // that only render a single row (resend swaps).
-func rowView(inv invites.Invite, csrf string) inviteRowView {
-	return rowViewAt(inv, csrf, time.Now().UTC())
+func rowView(inv invites.Invite) inviteRowView {
+	return rowViewAt(inv, time.Now().UTC())
 }
 
-func rowViewAt(inv invites.Invite, csrf string, now time.Time) inviteRowView {
+func rowViewAt(inv invites.Invite, now time.Time) inviteRowView {
 	status := "pending"
 	canResend := true
 	switch {
@@ -235,6 +229,5 @@ func rowViewAt(inv invites.Invite, csrf string, now time.Time) inviteRowView {
 		ExpiresAt:    inv.ExpiresAt.Format("2006-01-02 15:04 UTC"),
 		ExpiresAtISO: inv.ExpiresAt.Format(time.RFC3339Nano),
 		CanResend:    canResend,
-		CSRF:         csrf,
 	}
 }

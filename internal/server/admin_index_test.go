@@ -30,7 +30,7 @@ func TestAdminIndexAnonymousRedirected(t *testing.T) {
 func TestAdminIndexNonAdminForbidden(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.userClient(t)
+	client := f.userClient(t)
 
 	resp, err := client.Get(f.ts.URL + "/admin")
 	if err != nil {
@@ -45,7 +45,7 @@ func TestAdminIndexNonAdminForbidden(t *testing.T) {
 func TestAdminIndexAdminRedirectsToInvites(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.adminClient(t)
+	client := f.adminClient(t)
 
 	resp, err := client.Get(f.ts.URL + "/admin")
 	if err != nil {

@@ -21,8 +21,9 @@ import (
 )
 
 // TestLoginLogoutFlow is the integration test described in
-// docs/sprint-1.md §1.10 — the canonical guard for CSRF wiring,
-// cookie attributes, and the public-vs-authed root handler.
+// docs/sprint-1.md §1.10 — the canonical guard for the cross-origin
+// request middleware (T3.1), cookie attributes, and the public-vs-authed
+// root handler.
 func TestLoginLogoutFlow(t *testing.T) {
 	t.Parallel()
 
@@ -63,23 +64,19 @@ func TestLoginLogoutFlow(t *testing.T) {
 	ts := httptest.NewServer(srv.Echo())
 	t.Cleanup(ts.Close)
 
-	jar := newJar()
 	client := &http.Client{
-		Jar: jar,
+		Jar: newJar(),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 
-	// 2. GET /login. The _csrf cookie is gone after T3.1 swapped Echo's
-	// double-submit middleware for http.CrossOriginProtection; T3.2 will
-	// strip the form-field plumbing entirely.
+	// 2. GET /login.
 	mustGet(t, client, ts.URL+"/login", http.StatusOK)
-	csrf := jar.value("_csrf")
 
-	// 3. POST /login with cookie + token + credentials.
+	// 3. POST /login with credentials. http.CrossOriginProtection allows
+	// the request because Go's http.Client does not set Sec-Fetch-Site.
 	resp := mustPost(t, client, ts.URL+"/login", url.Values{
-		"_csrf":    {csrf},
 		"handle":   {"alice"},
 		"password": {"hunter2"},
 	})
@@ -116,7 +113,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 	}
 
 	// 6. POST /logout → auth cookie cleared.
-	resp = mustPost(t, client, ts.URL+"/logout", url.Values{"_csrf": {csrf}})
+	resp = mustPost(t, client, ts.URL+"/logout", nil)
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("logout: status %d, want 303", resp.StatusCode)
 	}
@@ -142,14 +139,12 @@ func TestLoginLogoutFlow(t *testing.T) {
 // and does not set the auth cookie.
 func TestLoginRejectsBadPassword(t *testing.T) {
 	t.Parallel()
-	ts, jar, client := newTestServer(t)
+	ts, client := newTestServer(t)
 	t.Cleanup(ts.Close)
 
 	mustGet(t, client, ts.URL+"/login", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, ts.URL+"/login", url.Values{
-		"_csrf":    {csrf},
 		"handle":   {"alice"},
 		"password": {"wrong"},
 	})
@@ -169,7 +164,7 @@ func TestLoginRejectsBadPassword(t *testing.T) {
 // flagged by the browser as cross-site must return 403.
 func TestCrossOriginRejected(t *testing.T) {
 	t.Parallel()
-	ts, _, client := newTestServer(t)
+	ts, client := newTestServer(t)
 	t.Cleanup(ts.Close)
 
 	resp := postWithFetchSite(t, client, ts.URL+"/login", "cross-site", url.Values{
@@ -186,7 +181,7 @@ func TestCrossOriginRejected(t *testing.T) {
 // same login request marked Sec-Fetch-Site: same-origin must succeed.
 func TestSameOriginAllowed(t *testing.T) {
 	t.Parallel()
-	ts, _, client := newTestServer(t)
+	ts, client := newTestServer(t)
 	t.Cleanup(ts.Close)
 
 	resp := postWithFetchSite(t, client, ts.URL+"/login", "same-origin", url.Values{
@@ -216,7 +211,7 @@ func postWithFetchSite(t *testing.T, c *http.Client, u, site string, form url.Va
 
 // --- helpers -------------------------------------------------------------
 
-func newTestServer(t *testing.T) (*httptest.Server, *jarHelper, *http.Client) {
+func newTestServer(t *testing.T) (*httptest.Server, *http.Client) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "huck.db")
 	if err := db.Create(dbPath); err != nil {
@@ -245,14 +240,13 @@ func newTestServer(t *testing.T) (*httptest.Server, *jarHelper, *http.Client) {
 		t.Fatalf("server.New: %v", err)
 	}
 	ts := httptest.NewServer(srv.Echo())
-	jar := newJar()
 	client := &http.Client{
-		Jar: jar,
+		Jar: newJar(),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	return ts, jar, client
+	return ts, client
 }
 
 func mustGet(t *testing.T, c *http.Client, u string, want int) {
@@ -288,7 +282,6 @@ func mustPost(t *testing.T, c *http.Client, u string, form url.Values) *http.Res
 		t.Fatalf("NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-CSRF-Token", form.Get("_csrf"))
 	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", u, err)
@@ -303,8 +296,8 @@ func trim(s string) string {
 	return s
 }
 
-// jarHelper is a tiny http.CookieJar that also lets us peek at a value by
-// name. Stripped down to only what the test needs.
+// jarHelper is a tiny http.CookieJar that retains cookies in memory
+// across requests issued by the same http.Client.
 type jarHelper struct {
 	cookies map[string]*http.Cookie
 }
@@ -322,10 +315,4 @@ func (j *jarHelper) Cookies(_ *url.URL) []*http.Cookie {
 		out = append(out, c)
 	}
 	return out
-}
-func (j *jarHelper) value(name string) string {
-	if c, ok := j.cookies[name]; ok {
-		return c.Value
-	}
-	return ""
 }

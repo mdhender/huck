@@ -98,23 +98,18 @@ func newAdminFixture(t *testing.T) *adminFixture {
 }
 
 // signIn logs in via POST /login and returns a client whose cookie jar
-// holds the auth + csrf cookies. Used by both the admin and non-admin
-// client variants below.
-func (f *adminFixture) signIn(t *testing.T, handle string) (*http.Client, *jarHelper) {
+// holds the auth cookie. Used by both the admin and non-admin client
+// variants below.
+func (f *adminFixture) signIn(t *testing.T, handle string) *http.Client {
 	t.Helper()
-	jar := newJar()
 	client := &http.Client{
-		Jar: jar,
+		Jar: newJar(),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 	mustGet(t, client, f.ts.URL+"/login", http.StatusOK)
-	// _csrf form value is now an empty string after T3.1 removed the
-	// double-submit middleware; T3.2 strips the field entirely.
-	csrf := jar.value("_csrf")
 	resp := mustPost(t, client, f.ts.URL+"/login", url.Values{
-		"_csrf":    {csrf},
 		"handle":   {handle},
 		"password": {adminPassword},
 	})
@@ -122,16 +117,16 @@ func (f *adminFixture) signIn(t *testing.T, handle string) (*http.Client, *jarHe
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("login %s: status %d, want 303", handle, resp.StatusCode)
 	}
-	return client, jar
+	return client
 }
 
-// adminClient is a signed-in client + its csrf cookie jar.
-func (f *adminFixture) adminClient(t *testing.T) (*http.Client, *jarHelper) {
+// adminClient is a signed-in client.
+func (f *adminFixture) adminClient(t *testing.T) *http.Client {
 	return f.signIn(t, "admin")
 }
 
 // userClient is the regular-user equivalent.
-func (f *adminFixture) userClient(t *testing.T) (*http.Client, *jarHelper) {
+func (f *adminFixture) userClient(t *testing.T) *http.Client {
 	return f.signIn(t, "alice")
 }
 
@@ -160,7 +155,7 @@ func TestAdminInvitesAnonymousRedirected(t *testing.T) {
 func TestAdminInvitesNonAdminForbidden(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.userClient(t)
+	client := f.userClient(t)
 
 	resp, err := client.Get(f.ts.URL + "/admin/invites")
 	if err != nil {
@@ -175,7 +170,7 @@ func TestAdminInvitesNonAdminForbidden(t *testing.T) {
 func TestAdminInvitesListEmpty(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.adminClient(t)
+	client := f.adminClient(t)
 
 	body := getBody(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
 	if !strings.Contains(body, "No invites yet") {
@@ -186,13 +181,11 @@ func TestAdminInvitesListEmpty(t *testing.T) {
 func TestAdminInvitesCreate(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 
 	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
-		"_csrf": {csrf},
 		"email": {"  Newcomer@Example.COM "},
 	})
 	defer resp.Body.Close()
@@ -235,12 +228,10 @@ func TestAdminInvitesCreate(t *testing.T) {
 func TestAdminInvitesCreateMissingEmail(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 
 	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
-	csrf := jar.value("_csrf")
 	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
-		"_csrf": {csrf},
 		"email": {"   "},
 	})
 	defer resp.Body.Close()
@@ -256,12 +247,10 @@ func TestAdminInvitesCreateDuplicate409(t *testing.T) {
 		t.Fatalf("seed invite: %v", err)
 	}
 
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
-		"_csrf": {csrf},
 		"email": {"dup@example.com"},
 	})
 	defer resp.Body.Close()
@@ -276,12 +265,10 @@ func TestAdminInvitesCreateMailgunFailureRollsBack(t *testing.T) {
 	f := newAdminFixture(t)
 	f.mailer.SendErr = errors.New("mailgun is down")
 
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
-		"_csrf": {csrf},
 		"email": {"willfail@example.com"},
 	})
 	defer resp.Body.Close()
@@ -307,18 +294,16 @@ func TestAdminInvitesResend(t *testing.T) {
 		t.Fatalf("seed invite: %v", err)
 	}
 
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	req, err := http.NewRequest("POST",
 		f.ts.URL+"/admin/invites/"+inv.Token.String()+"/resend",
-		strings.NewReader(url.Values{"_csrf": {csrf}}.Encode()))
+		strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-CSRF-Token", csrf)
 	req.Header.Set("HX-Request", "true")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -348,18 +333,16 @@ func TestAdminInvitesRevoke(t *testing.T) {
 		t.Fatalf("seed invite: %v", err)
 	}
 
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	req, err := http.NewRequest("POST",
 		f.ts.URL+"/admin/invites/"+inv.Token.String()+"/revoke",
-		strings.NewReader(url.Values{"_csrf": {csrf}}.Encode()))
+		strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-CSRF-Token", csrf)
 	req.Header.Set("HX-Request", "true")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -382,15 +365,10 @@ func TestAdminInvitesRevokeNonAdminForbidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed invite: %v", err)
 	}
-	client, jar := f.userClient(t)
-
-	// We need a CSRF cookie on this client; the existing /login flow seeded it,
-	// but Echo refreshes it per request. Hit / to ensure one is present.
-	mustGet(t, client, f.ts.URL+"/", http.StatusOK)
-	csrf := jar.value("_csrf")
+	client := f.userClient(t)
 
 	resp := mustPost(t, client, f.ts.URL+"/admin/invites/"+inv.Token.String()+"/revoke",
-		url.Values{"_csrf": {csrf}})
+		nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status: got %d, want 403", resp.StatusCode)

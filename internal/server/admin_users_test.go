@@ -39,7 +39,7 @@ func TestAdminUsersAnonymousRedirected(t *testing.T) {
 func TestAdminUsersNonAdminForbidden(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.userClient(t)
+	client := f.userClient(t)
 
 	resp, err := client.Get(f.ts.URL + "/admin/users")
 	if err != nil {
@@ -54,7 +54,7 @@ func TestAdminUsersNonAdminForbidden(t *testing.T) {
 func TestAdminUsersList(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.adminClient(t)
+	client := f.adminClient(t)
 
 	body := getBody(t, client, f.ts.URL+"/admin/users", http.StatusOK)
 	if !strings.Contains(body, "admin@example.com") {
@@ -72,7 +72,7 @@ func TestAdminUsersList(t *testing.T) {
 func TestAdminUsersView(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.adminClient(t)
+	client := f.adminClient(t)
 
 	body := getBody(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10), http.StatusOK)
@@ -84,7 +84,7 @@ func TestAdminUsersView(t *testing.T) {
 func TestAdminUsersViewMissing(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.adminClient(t)
+	client := f.adminClient(t)
 
 	resp, err := client.Get(f.ts.URL + "/admin/users/9999")
 	if err != nil {
@@ -99,7 +99,7 @@ func TestAdminUsersViewMissing(t *testing.T) {
 func TestAdminUsersEditForm(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, _ := f.adminClient(t)
+	client := f.adminClient(t)
 
 	body := getBody(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/edit",
@@ -115,13 +115,12 @@ func TestAdminUsersEditForm(t *testing.T) {
 func TestAdminUsersEditPromote(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/edit",
-		url.Values{"_csrf": {csrf}, "is_admin": {"1"}})
+		url.Values{"is_admin": {"1"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status: got %d, want 303", resp.StatusCode)
@@ -139,14 +138,13 @@ func TestAdminUsersEditPromote(t *testing.T) {
 func TestAdminUsersEditResetPassword(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	const newPassword = "rotateMyKeysNow"
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/edit",
-		url.Values{"_csrf": {csrf}, "password": {newPassword}})
+		url.Values{"password": {newPassword}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status: got %d, want 303", resp.StatusCode)
@@ -167,13 +165,12 @@ func TestAdminUsersEditResetPassword(t *testing.T) {
 func TestAdminUsersEditWeakPassword(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/edit",
-		url.Values{"_csrf": {csrf}, "password": {"short"}})
+		url.Values{"password": {"short"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		body, _ := io.ReadAll(resp.Body)
@@ -193,14 +190,13 @@ func TestAdminUsersEditWeakPassword(t *testing.T) {
 func TestAdminUsersEditRefusesSelfDemote(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	// is_admin omitted → wantAdmin=false → demote-self.
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.admin.ID, 10)+"/edit",
-		url.Values{"_csrf": {csrf}})
+		nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
@@ -220,13 +216,12 @@ func TestAdminUsersEditRefusesSelfDemote(t *testing.T) {
 func TestAdminUsersDelete(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/delete",
-		url.Values{"_csrf": {csrf}})
+		nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status: got %d, want 303", resp.StatusCode)
@@ -240,13 +235,12 @@ func TestAdminUsersDelete(t *testing.T) {
 func TestAdminUsersDeleteRefusesSelf(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.admin.ID, 10)+"/delete",
-		url.Values{"_csrf": {csrf}})
+		nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status: got %d, want 403", resp.StatusCode)
@@ -260,13 +254,12 @@ func TestAdminUsersDeleteRefusesSelf(t *testing.T) {
 func TestAdminUsersDeleteMissing(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	client, jar := f.adminClient(t)
+	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/9999/delete",
-		url.Values{"_csrf": {csrf}})
+		nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status: got %d, want 404", resp.StatusCode)

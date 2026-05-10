@@ -130,18 +130,15 @@ func (f *signupFixture) markConsumed(t *testing.T, tok invites.Token) {
 }
 
 // signupClient builds an isolated http.Client + cookie jar for a single
-// signup attempt, fetches the form to capture the CSRF cookie, and
-// returns the client + jar + token to the test for the POST.
-func (f *signupFixture) signupClient(t *testing.T) (*http.Client, *jarHelper) {
+// signup attempt.
+func (f *signupFixture) signupClient(t *testing.T) *http.Client {
 	t.Helper()
-	jar := newJar()
-	client := &http.Client{
-		Jar: jar,
+	return &http.Client{
+		Jar: newJar(),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	return client, jar
 }
 
 func TestSignupGoldenPath(t *testing.T) {
@@ -149,18 +146,13 @@ func TestSignupGoldenPath(t *testing.T) {
 	f := newSignupFixture(t)
 	inv := f.createInvite(t, "alice@example.com")
 
-	client, jar := f.signupClient(t)
+	client := f.signupClient(t)
 	body := getBody(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
 	if !strings.Contains(body, "alice@example.com") {
 		t.Errorf("signup form should pre-fill the invite email; got: %s", trim(body))
 	}
-	// _csrf is empty after T3.1 dropped the double-submit middleware;
-	// T3.2 will strip the form field. Leaving the plumbing in place
-	// keeps the diff minimal for now.
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
-		"_csrf":    {csrf},
 		"email":    {"alice@example.com"},
 		"handle":   {"alice"},
 		"password": {"correcthorsebattery"},
@@ -204,7 +196,7 @@ func TestSignupGoldenPath(t *testing.T) {
 func TestSignupGetMissingToken(t *testing.T) {
 	t.Parallel()
 	f := newSignupFixture(t)
-	client, _ := f.signupClient(t)
+	client := f.signupClient(t)
 
 	resp, err := client.Get(f.ts.URL + "/signup/no-such-token")
 	if err != nil {
@@ -222,7 +214,7 @@ func TestSignupGetExpiredToken(t *testing.T) {
 	inv := f.createInvite(t, "expired@example.com")
 	f.backdateExpiry(t, inv.Token)
 
-	client, _ := f.signupClient(t)
+	client := f.signupClient(t)
 	resp, err := client.Get(f.ts.URL + "/signup/" + inv.Token.String())
 	if err != nil {
 		t.Fatalf("GET: %v", err)
@@ -239,7 +231,7 @@ func TestSignupGetConsumedToken(t *testing.T) {
 	inv := f.createInvite(t, "consumed@example.com")
 	f.markConsumed(t, inv.Token)
 
-	client, _ := f.signupClient(t)
+	client := f.signupClient(t)
 	resp, err := client.Get(f.ts.URL + "/signup/" + inv.Token.String())
 	if err != nil {
 		t.Fatalf("GET: %v", err)
@@ -255,12 +247,10 @@ func TestSignupSubmitEmailMismatch(t *testing.T) {
 	f := newSignupFixture(t)
 	inv := f.createInvite(t, "bound@example.com")
 
-	client, jar := f.signupClient(t)
+	client := f.signupClient(t)
 	mustGet(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
-		"_csrf":    {csrf},
 		"email":    {"tampered@example.com"},
 		"handle":   {"newcomer"},
 		"password": {"correcthorsebattery"},
@@ -301,12 +291,10 @@ func TestSignupSubmitHandleTaken(t *testing.T) {
 	}
 
 	inv := f.createInvite(t, "newalice@example.com")
-	client, jar := f.signupClient(t)
+	client := f.signupClient(t)
 	mustGet(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
-		"_csrf":    {csrf},
 		"email":    {"newalice@example.com"},
 		"handle":   {"alice"},
 		"password": {"correcthorsebattery"},
@@ -335,12 +323,10 @@ func TestSignupSubmitWeakPassword(t *testing.T) {
 	f := newSignupFixture(t)
 	inv := f.createInvite(t, "weak@example.com")
 
-	client, jar := f.signupClient(t)
+	client := f.signupClient(t)
 	mustGet(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
-		"_csrf":    {csrf},
 		"email":    {"weak@example.com"},
 		"handle":   {"weakling"},
 		"password": {"short"}, // < 12 chars
@@ -360,16 +346,14 @@ func TestSignupSubmitExpiredToken(t *testing.T) {
 	f := newSignupFixture(t)
 	inv := f.createInvite(t, "exp@example.com")
 
-	client, jar := f.signupClient(t)
-	// GET first to seed the CSRF cookie before backdating (so the form
-	// renders, mirroring a user who left the page open past the deadline).
+	client := f.signupClient(t)
+	// GET first so the form renders, mirroring a user who left the page
+	// open past the deadline.
 	mustGet(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
-	csrf := jar.value("_csrf")
 
 	f.backdateExpiry(t, inv.Token)
 
 	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
-		"_csrf":    {csrf},
 		"email":    {"exp@example.com"},
 		"handle":   {"latecomer"},
 		"password": {"correcthorsebattery"},
@@ -400,13 +384,11 @@ func TestSignupParallelSubmits(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			client, jar := f.signupClient(t)
+			client := f.signupClient(t)
 			mustGet(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
-			csrf := jar.value("_csrf")
 
 			<-start
 			resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
-				"_csrf":    {csrf},
 				"email":    {"race@example.com"},
 				"handle":   {handles[i]},
 				"password": {"correcthorsebattery"},

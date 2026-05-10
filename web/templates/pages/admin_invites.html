@@ -13,7 +13,6 @@
             <li><a href="/">Home</a></li>
             <li>
                 <form class="inline" method="post" action="/logout">
-                    <input type="hidden" name="_csrf" value="{{ .CSRF }}">
                     <button type="submit" class="secondary">Sign out</button>
                 </form>
             </li>
@@ -30,7 +29,6 @@
         <p><em>{{ .Notice }}</em></p>
     {{ end }}
     <form method="post" action="/admin/invites">
-        <input type="hidden" name="_csrf" value="{{ .CSRF }}">
         <label>
             Email
             <input type="email" name="email" required autofocus

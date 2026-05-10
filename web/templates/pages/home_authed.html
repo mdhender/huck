@@ -11,7 +11,6 @@
             {{ if .Admin }}<li><a href="/admin">Admin</a></li>{{ end }}
             <li>
                 <form class="inline" method="post" action="/logout">
-                    <input type="hidden" name="_csrf" value="{{ .CSRF }}">
                     <button type="submit" class="secondary">Sign out</button>
                 </form>
             </li>

@@ -10,7 +10,6 @@
         <p><strong>{{ .Error }}</strong></p>
     {{ end }}
     <form method="post" action="/login">
-        <input type="hidden" name="_csrf" value="{{ .CSRF }}">
         <label>
             Handle
             <input type="text" name="handle" autocomplete="username" required autofocus

@@ -26,7 +26,6 @@ type userRowView struct {
 
 // adminUsersView is the data shape consumed by pages/admin_users.html.
 type adminUsersView struct {
-	CSRF   string
 	Handle string
 	Notice string
 	Rows   []userRowView
@@ -35,7 +34,6 @@ type adminUsersView struct {
 // adminUserView is the data shape consumed by pages/admin_user_view.html
 // and pages/admin_user_edit.html.
 type adminUserView struct {
-	CSRF         string
 	Handle       string
 	User         users.User
 	IsSelf       bool
@@ -67,7 +65,6 @@ func (s *Server) handleAdminUsersList(c *echo.Context) error {
 		})
 	}
 	return c.Render(http.StatusOK, "pages/admin_users.html", adminUsersView{
-		CSRF:   csrfToken(c),
 		Handle: claims.Handle,
 		Rows:   rows,
 	})
@@ -88,7 +85,7 @@ func (s *Server) handleAdminUsersView(c *echo.Context) error {
 		return err
 	}
 	return c.Render(http.StatusOK, "pages/admin_user_view.html",
-		newAdminUserView(claims, u, csrfToken(c)))
+		newAdminUserView(claims, u))
 }
 
 // handleAdminUsersEditForm renders the edit form for one user.
@@ -106,7 +103,7 @@ func (s *Server) handleAdminUsersEditForm(c *echo.Context) error {
 		return err
 	}
 	return c.Render(http.StatusOK, "pages/admin_user_edit.html",
-		newAdminUserView(claims, u, csrfToken(c)))
+		newAdminUserView(claims, u))
 }
 
 // handleAdminUsersEditSubmit applies an is_admin toggle and/or password
@@ -179,16 +176,15 @@ func (s *Server) handleAdminUsersDelete(c *echo.Context) error {
 
 // renderAdminUserEditError re-renders the edit form with an error banner.
 func (s *Server) renderAdminUserEditError(c *echo.Context, claims *auth.Claims, u users.User, msg string, status int) error {
-	view := newAdminUserView(claims, u, csrfToken(c))
+	view := newAdminUserView(claims, u)
 	view.Error = msg
 	return c.Render(status, "pages/admin_user_edit.html", view)
 }
 
 // newAdminUserView decorates a User with the format/self-aware fields the
 // view + edit templates need.
-func newAdminUserView(claims *auth.Claims, u users.User, csrf string) adminUserView {
+func newAdminUserView(claims *auth.Claims, u users.User) adminUserView {
 	return adminUserView{
-		CSRF:         csrf,
 		Handle:       claims.Handle,
 		User:         u,
 		IsSelf:       u.ID == claims.UserID(),

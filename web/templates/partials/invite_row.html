@@ -12,7 +12,6 @@
                   hx-target="#invite-{{ .Token }}"
                   hx-swap="outerHTML"
                   style="display:inline">
-                <input type="hidden" name="_csrf" value="{{ .CSRF }}">
                 <button type="submit" class="secondary">Resend</button>
             </form>
             <form method="post"
@@ -22,7 +21,6 @@
                   hx-swap="outerHTML"
                   hx-confirm="Revoke invite for {{ .Email }}?"
                   style="display:inline">
-                <input type="hidden" name="_csrf" value="{{ .CSRF }}">
                 <button type="submit" class="contrast">Revoke</button>
             </form>
         {{ end }}

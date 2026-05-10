@@ -14,7 +14,6 @@
             <li><a href="/">Home</a></li>
             <li>
                 <form class="inline" method="post" action="/logout">
-                    <input type="hidden" name="_csrf" value="{{ .CSRF }}">
                     <button type="submit" class="secondary">Sign out</button>
                 </form>
             </li>
@@ -41,7 +40,6 @@
         <form method="post" action="/admin/users/{{ .User.ID }}/delete"
               style="display:inline"
               onsubmit="return confirm('Delete user {{ .User.Handle }}? This cannot be undone.');">
-            <input type="hidden" name="_csrf" value="{{ .CSRF }}">
             <button type="submit" class="contrast">Delete</button>
         </form>
     {{ end }}
