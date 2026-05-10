@@ -73,7 +73,7 @@ The sidebar is built from facts that are true *now*, not from
 placeholders. Per "no mystery," dead links are forbidden.
 
 - **Always (any authed user):** Home, Account.
-- **If `is_admin`:** an Admin section (Invites, Users, …).
+- **If `is_admin`:** an Admin section (Dashboard, Invites, Users, …).
 - **If the user is currently inside a game** (i.e. the URL is scoped
   to a specific game): a game-scoped section appears, populated
   according to the user's role *in that game*. Player-scoped links
@@ -117,8 +117,12 @@ Three regions on desktop:
 ╰─────────────┴───────────────────────────────────────────╯
 ```
 
-Used for everything post-login: `home_authed.html`, all `admin_*`
-pages, future game pages, future account pages.
+Used for everything post-login: `home_authed.html`, `account.html`,
+all `admin_*` pages, future game pages, future account-edit pages.
+
+For now, `/account` reuses the same read-only detail shape as the admin
+`/admin/users/:id` page, scoped to the signed-in user. It can grow into
+account editing later, but the navigation destination is real in Sprint 3.
 
 ### How handlers choose
 
@@ -164,8 +168,10 @@ type Crumb struct {
 }
 ```
 
-Every page view struct that uses the app shell embeds a
-`Crumbs []Crumb` field. The handler builds it explicitly:
+Every app-shell render provides a typed shell view containing
+`Crumbs []Crumb`. Handlers build the breadcrumbs explicitly; the
+renderer may compose the page view and shell view once so page
+templates keep receiving their own page view as dot:
 
 ```go
 crumbs := []server.Crumb{

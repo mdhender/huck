@@ -28,10 +28,10 @@ complete:
 - CSRF tokens, hidden `_csrf` fields, and CSRF view fields are gone.
 - The shared `hxRedirect` helper exists and covers HTMX vs. non-HTMX
   redirects.
-- The `/admin` index redirect has been dropped or deliberately handled
-  per Sprint 3 T11.
+- `/admin` is a real admin dashboard page and `/account` is a real
+  signed-in account page per Sprint 3 T11.
 - `homeView` has been split into auth-shell and app-shell view structs
-  per Sprint 3 T15.
+  per Sprint 3 T14.
 - A baseline renderer smoke test exists for the current page-vs-partial
   dispatch before T2.2 changes the layout selection logic.
 - Admin user detail routes are confirmed as `/admin/users/:id` and
@@ -58,6 +58,7 @@ complete:
 | T4.2 | TODO   |        |
 | T4.3 | TODO   |        |
 | T4.4 | TODO   |        |
+| T4.5 | TODO   |        |
 | T5   | TODO   |        |
 | T6   | TODO   |        |
 | T7   | TODO   |        |
@@ -105,10 +106,9 @@ game-scoped links yet (no game model).
 
 - Add `web/templates/partials/sidebar.html`.
 - Always-visible items: **Home** (`/`), **Account** (`/account`, but
-  only if a real page or intentional stub exists; otherwise omit the
-  link rather than adding a dead one).
-- If `is_admin`: an **Admin** section with **Invites**
-  (`/admin/invites`) and **Users** (`/admin/users`).
+  Sprint 3 T11 makes this a real page before Sprint 4 starts).
+- If `is_admin`: an **Admin** section with **Dashboard** (`/admin`),
+  **Invites** (`/admin/invites`), and **Users** (`/admin/users`).
 - The partial receives the typed sidebar view from T1.1 so it can hide
   admin items for non-admins and mark the current section with
   `aria-current="page"`.
@@ -213,20 +213,35 @@ Touch the signed-in home path only:
 Add shell data with `[Home]` breadcrumbs, correct sidebar/topbar state,
 and a `.huck-page-header` around the H1/header area.
 
-### T4.3 — Retrofit the admin invites page
+### T4.3 — Retrofit the account page
 
-Touch the invites admin surface only:
+Touch the signed-in account surface only:
 
+- `account.html`
+- the `/account` handler from Sprint 3 T11 and related tests
+
+For now, `/account` shows the same content as the admin
+`/admin/users/:id` detail page, scoped to the current signed-in user.
+Add shell data with `[Home, Account]` breadcrumbs, correct sidebar/topbar
+state, and a `.huck-page-header` around the H1/header area.
+
+### T4.4 — Retrofit the admin dashboard and invites pages
+
+Touch the admin dashboard and invites surfaces only:
+
+- `admin.html`
 - `admin_invites.html`
+- `handleAdminIndex`
 - `handleAdminInvitesList`, invite create error/success re-renders, and
   related tests
 
-Add shell data with `[Home, Admin, Invites]` breadcrumbs, correct current
-sidebar state, `.huck-page-header`, and `.huck-form-stack` where it
-improves form rhythm. Confirm `partials/invite_row.html` remains suitable
-for injection inside `.huck-content`.
+Add shell data with `[Home, Admin]` breadcrumbs for `/admin` and
+`[Home, Admin, Invites]` breadcrumbs for `/admin/invites`, correct
+current sidebar state, `.huck-page-header`, and `.huck-form-stack`
+where it improves form rhythm. Confirm `partials/invite_row.html`
+remains suitable for injection inside `.huck-content`.
 
-### T4.4 — Retrofit the admin users pages
+### T4.5 — Retrofit the admin users pages
 
 Touch the users admin surface only:
 
@@ -301,9 +316,8 @@ them.
 - Status cards, upload wizards, validation panels, GM-density
   tables, design tokens, light/dark toggle, mobile hamburger.
   All deferred per `docs/front-end-plan.md` §8.
-- A full Account page. The sidebar may link to `/account` only if a
-  real page or intentional stub exists; otherwise omit the link until
-  Sprint 5.
+- Account editing. Sprint 3 adds `/account` as a read-only detail page;
+  profile editing can land in a later sprint.
 - Any change to `internal/auth`, `internal/users`,
   `internal/invites`, or the schema. Sprint 4 is a templates +
   CSS sprint with a tiny renderer change.
@@ -326,8 +340,8 @@ Per AGENTS.md "Verification before saying 'done'":
 - Manual smoke-test of `huck serve`:
   - Public home, login, signup, error all render in the auth
     shell (centered, no sidebar).
-  - Authed home, `/admin/invites`, `/admin/users`,
-    `/admin/users/:id`, `/admin/users/:id/edit` all
+  - Authed home, `/account`, `/admin`, `/admin/invites`,
+    `/admin/users`, `/admin/users/:id`, `/admin/users/:id/edit` all
     render in the app shell with the correct sidebar items
     and breadcrumb trail.
   - Logging out from the topbar works and lands on the
@@ -345,3 +359,5 @@ Per AGENTS.md "Verification before saying 'done'":
   the Sprint 4 planning thread.
 - **2026-05-10** — Reordered for implementation dependencies and split
   broad tasks into agent-sized slices.
+- **2026-05-10** — Updated for Sprint 3's real `/admin` dashboard and
+  read-only `/account` page.

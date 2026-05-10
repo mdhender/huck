@@ -1,11 +1,13 @@
 # Sprint 3 — Implementation Plan
 
-Status: **Draft 2026-05-09.**
+Status: **Ready 2026-05-10.**
 
 Sprint 3 is a clean-up and consolidation sprint driven by the code-smell
-review of the post–Sprint 2 codebase. There is no new user-facing
-feature; every task either removes duplication, deletes dead code, or
-swaps a hand-rolled mechanism for a stdlib equivalent.
+review of the post–Sprint 2 codebase. Almost every task either removes
+duplication, deletes dead code, or swaps a hand-rolled mechanism for a
+stdlib equivalent. The only new user-visible surface is T11's minimal
+`/admin` and `/account` pages, added to settle navigation contracts
+before the layout sprint.
 
 The detailed contracts (schema, password/handle policies, invite flow,
 routes, security headers) continue to live in `docs/DESIGN.md`. This
@@ -35,7 +37,7 @@ the document to update first.
 
 Task order encodes the known dependencies: T2 follows the mail package
 collapse in T1, T3.2 follows the CrossOriginProtection install in
-T3.1, T14 waits for the CSRF, redirect, and `/admin` cleanup baseline,
+T3.1, T14 waits for the CSRF, redirect, and app-route cleanup baseline,
 and T15 closes the Sprint 4 docs once that code baseline is settled.
 
 ### T1 — Collapse `internal/email` into `internal/mail`
@@ -276,19 +278,28 @@ SQLite error-message format and to the column names.
 - Add a unit test that exercises both UNIQUE paths and would fail
   loudly if SQLite's wording ever drifted (or the columns ever moved).
 
-### T11 — Drop or fix the `/admin` index redirect
+### T11 — Add real `/admin` and `/account` pages
 
-`admin.GET("", s.handleAdminIndex)` is mounted to redirect to
-`/admin/invites`. Echo will not match `/admin/` for that route, and
-the round-trip is wasted on the operator's most common entry point.
+`/admin` and `/account` keep coming up in layout reviews because they
+are navigation-level destinations but are not real pages yet. Make them
+real now so Sprint 4 can wire stable sidebar links without special
+cases.
 
-- Drop `handleAdminIndex` and link directly to `/admin/invites` from
-  the home view, or
-- Keep it but also handle the trailing-slash case with a single
-  redirect helper.
+- Replace the `/admin` redirect with an empty admin dashboard page.
+  It may contain only a title/placeholder for now; the route exists
+  because `/admin` will eventually be the admin dashboard.
+- Handle both `/admin` and `/admin/` consistently. Prefer one canonical
+  page route plus the smallest redirect needed for the trailing-slash
+  form.
+- Add `/account` for signed-in users. For now, it shows the same content
+  and data shape as the admin `/admin/users/:id` detail page, scoped to
+  the current user.
+- Wire the signed-in home page to `/admin` for admins and `/account` for
+  account navigation. Sprint 4's sidebar should be able to link to both
+  without dead-link exceptions.
+- Add route/render tests for `/admin`, `/admin/`, and `/account`.
 
-Pick the simpler option (drop the handler); the home page already
-knows the destination.
+No schema or account-editing behavior is in scope.
 
 ### T12 — Tighten exported surface in `internal/auth`
 
@@ -332,7 +343,7 @@ the renderer and template baseline is already stable.
 - Add a small renderer smoke test before Sprint 4 changes layout
   dispatch: rendering a page template should go through the current
   layout, and rendering a partial template should render the partial
-  alone. Sprint 4 T2 can then update that baseline instead of adding
+  alone. Sprint 4 T2.2 can then update that baseline instead of adding
   coverage from scratch while changing the renderer.
 
 ### T15 — Front-end contract readiness for Sprint 4
@@ -340,31 +351,23 @@ the renderer and template baseline is already stable.
 Sprint 4 should begin with the front-end contracts settled, not with
 implementation-time ambiguity. This is a doc-only readiness task: do
 not build the new shells, templates, partials, or CSS primitives here.
-Run this after T14 so the Sprint 4 entry checklist records the actual
-Sprint 3 baseline.
+Run this after T14 so the Sprint 4 docs match the actual Sprint 3
+baseline.
 
-- Reconcile the app-shell data contract between `docs/front-end-plan.md`
-  and `docs/sprint-4.md`. The plan currently says every app-shell page
-  view embeds `Crumbs []Crumb`; the Sprint 4 task list later leans
-  toward a typed shell view composed once by the renderer. Pick the
-  contract before implementation, document it in the plan, and make the
-  Sprint 4 tasks match.
-- Reconcile the **Account** sidebar rule. Miko's "no mystery" principle
-  forbids dead links; if there is no `/account` page yet, Sprint 4
-  should either omit the link or explicitly include a real Account stub
-  page in scope. Pick one and make `docs/front-end-plan.md` and
-  `docs/sprint-4.md` agree.
-- Add a short "Sprint 4 entry checklist" to `docs/sprint-4.md` so the
-  layout sprint starts from a known baseline: CSRF fields removed,
-  `hxRedirect` exists, `/admin` redirect handled per T11, renderer tests
-  are green, and existing templates have been reviewed for duplicated
-  nav/header assumptions.
+- Verify the app-shell data contract in `docs/front-end-plan.md` and
+  `docs/sprint-4.md` still matches the Sprint 3 baseline: breadcrumbs
+  live in typed shell data, and the renderer may compose that shell data
+  with each page view once.
+- Confirm `docs/front-end-plan.md` and `docs/sprint-4.md` agree that
+  `/admin` is a real admin dashboard page and `/account` is a real
+  signed-in page before Sprint 4 starts.
 - Fix small wording typos while touching the Sprint 4 docs, if any are
   present in the checked-in text.
 
 ## Out of scope
 
-- Any new feature work. Sprint 3 is tech-debt burndown only.
+- Any feature work beyond T11's minimal `/admin` and `/account` pages.
+  Sprint 3 is otherwise tech-debt burndown only.
 
 ## Verification before closing the sprint
 
@@ -384,7 +387,12 @@ Per AGENTS.md "Verification before saying 'done'":
 - Manual smoke-test of `huck serve`: log in, create an invite, sign
   up via the emailed link, and confirm no `_csrf` cookie or hidden
   form field is present in the rendered HTML (T3.2).
+- Manual route smoke-test: `/admin`, `/admin/`, and `/account` render
+  for authorized users and reject unauthorized users correctly.
 
 ## Change log
 
 - **2026-05-09** — Drafted from the post–Sprint 2 code-smell review.
+- **2026-05-10** — Made `/admin` and `/account` real Sprint 3 pages,
+  trimmed duplicate Sprint 4 checklist work from T15, and refreshed
+  stale Sprint 4 task references.
