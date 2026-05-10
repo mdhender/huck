@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/DESIGN.md` — full architectural design. Schema/flag/policy decisions live here. If you need to deviate, update DESIGN.md first, then AGENTS.md, then write code.
 - `docs/sprint-1.md`, `docs/sprint-2.md`, `docs/sprint-3.md` — implementation plans for the in-progress sprints. `docs/sprint-4.md` is a forward-looking front-end layout sprint that begins after Sprint 3 closes.
 
+## Finding Go package source
+
+If you need to read the source of a Go dependency (anything in `go.mod`), look under `~/go` — module sources live in `~/go/pkg/mod/<module>@<version>/` and binaries in `~/go/bin`. Use `go env GOMODCACHE` if you need the exact path. **Do not** `find /`, scan `/usr`, or otherwise hunt around the filesystem; the answer is always under `~/go`.
+
 ## Build, test, run
 
 ```sh
