@@ -1,6 +1,7 @@
 # Build artifacts
 /huck
 /dist/
+/tmp/
 
 # Go
 *.exe
