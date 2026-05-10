@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -212,13 +211,8 @@ func parseUserID(c *echo.Context) (int64, error) {
 // short message naming the rule that failed. Falls back to a generic
 // message for unexpected errors so we never leak internals.
 func adminUserPasswordErrorMessage(err error) string {
-	switch {
-	case errors.Is(err, auth.ErrPasswordTooShort):
-		return fmt.Sprintf("Password must be at least %d characters.", auth.MinPasswordLen)
-	case errors.Is(err, auth.ErrPasswordTooLong):
-		return fmt.Sprintf("Password must be at most %d characters.", auth.MaxPasswordLen)
-	case errors.Is(err, auth.ErrPasswordNotPrintable):
-		return "Password contains a non-printable character."
+	if msg := passwordErrMsg(err); msg != "" {
+		return msg
 	}
 	return "Password is invalid."
 }

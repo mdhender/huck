@@ -379,19 +379,31 @@ func (s *Server) renderSignupFailure(c *echo.Context, token, email, handle strin
 	return c.Render(http.StatusUnprocessableEntity, "pages/signup.html", view)
 }
 
-// signupErrorMessage maps a validator/store error to a short message
-// the user can act on. Falls back to a generic message for unexpected
-// errors so we never leak internal details.
-func signupErrorMessage(err error) string {
+// passwordErrMsg maps an auth.ValidatePassword sentinel to a short
+// message naming the rule that failed. Returns "" if err is not a
+// password sentinel, so callers can chain it with their own switches.
+func passwordErrMsg(err error) string {
 	switch {
-	case errors.Is(err, errEmailMismatch):
-		return "Submitted email does not match the invite."
 	case errors.Is(err, auth.ErrPasswordTooShort):
 		return fmt.Sprintf("Password must be at least %d characters.", auth.MinPasswordLen)
 	case errors.Is(err, auth.ErrPasswordTooLong):
 		return fmt.Sprintf("Password must be at most %d characters.", auth.MaxPasswordLen)
 	case errors.Is(err, auth.ErrPasswordNotPrintable):
 		return "Password contains a non-printable character."
+	}
+	return ""
+}
+
+// signupErrorMessage maps a validator/store error to a short message
+// the user can act on. Falls back to a generic message for unexpected
+// errors so we never leak internal details.
+func signupErrorMessage(err error) string {
+	if msg := passwordErrMsg(err); msg != "" {
+		return msg
+	}
+	switch {
+	case errors.Is(err, errEmailMismatch):
+		return "Submitted email does not match the invite."
 	case errors.Is(err, auth.ErrHandleTooShort),
 		errors.Is(err, auth.ErrHandleTooLong),
 		errors.Is(err, auth.ErrHandleBadFirstChar),
