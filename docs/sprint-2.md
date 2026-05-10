@@ -247,7 +247,7 @@ pass and a commit lands on `main`.
   *Acceptance:* `go test ./internal/server/...` passes; admin can
   walk the four operations against another user.
 
-- [x] **T8 — Manual smoke test + README.**
+- [x] **T8 — Manual smoke test + README.** ✅ `33d5bb9`
   Drop and rebuild the dev DB, run `huck admin create`, log in, issue
   an invite (real Mailgun this time, not fake), click the email link,
   sign up as a non-admin, log out, log back in as the new user,
