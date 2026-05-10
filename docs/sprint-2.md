@@ -1,6 +1,6 @@
 # Sprint 2 — Implementation Plan
 
-Status: **Ready to start — design locked 2026-05-09.**
+Status: **Closed 2026-05-09.** All tasks (T1–T8) landed on `main`; manual smoke test passed.
 
 Sprint 1 deferred the following items, all of which Sprint 2 picks up.
 The detailed contracts live in `docs/DESIGN.md` (§7.4 schema, §8.7
