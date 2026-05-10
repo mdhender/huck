@@ -12,6 +12,13 @@ import (
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
+
+	// invites depends on users for the shared handle/email normaliser
+	// (sprint-3 T9). The dependency direction matches signup, where the
+	// server consumes an invite *and* creates a user in the same flow,
+	// so users never needs to import invites — no cycle is possible
+	// without a larger refactor first.
+	"github.com/mdhender/huck/internal/users"
 )
 
 // ttl is the lifetime applied at Create and refreshed at Resend.
@@ -70,7 +77,7 @@ func (s *Store) Create(ctx context.Context, email string, invitedBy int64) (Invi
 // sqlitex.Transaction so that a Mailgun failure rolls the row back; the
 // caller owns the transaction boundary on conn.
 func (s *Store) CreateOnConn(conn *sqlite.Conn, email string, invitedBy int64) (Invite, error) {
-	email = normaliseEmail(email)
+	email = users.Normalise(email)
 	if email == "" {
 		return Invite{}, errors.New("invites: email is required")
 	}
@@ -295,11 +302,6 @@ func getByToken(conn *sqlite.Conn, t Token) (Invite, error) {
 	}
 	return inv, nil
 }
-
-// normaliseEmail mirrors users.Normalise. The invites package keeps its
-// own copy to avoid importing users (and accidentally creating a cycle
-// if users ever needs invites).
-func normaliseEmail(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
 func parseTime(s string) time.Time {
 	t, _ := time.Parse(time.RFC3339Nano, s)
