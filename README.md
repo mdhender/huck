@@ -90,7 +90,7 @@ not v4", and "registration is invite-only" rules.
 The following prompt seems to work well with Amp, Claude, and Codex.
 
 ```text
-Implement the next unchecked/TODO sprint task. Follow the Agent Execution Rules in the sprint document. When complete:
+Implement the next unchecked/TODO task in docs/sprint-NNNN.md. Follow the Agent Execution Rules in the sprint document. When complete:
 1. update the sprint table
 2. run the required verification
 3. commit the task as one focused commit
@@ -98,6 +98,7 @@ Implement the next unchecked/TODO sprint task. Follow the Agent Execution Rules 
 5. stop
 ```
 
+After the task completes, clear the context and repeat. Once the sprint has finished, validate and then ask the agent to update the sprint document as complete and commit. Optionally, if you have tokens to burn, you can ask the agent to update the commit column in the sprint table.
 
 ## Project layout
 
