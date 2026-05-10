@@ -30,6 +30,7 @@ the document to update first.
 | T12  | TODO   |        |
 | T13  | TODO   |        |
 | T14  | TODO   |        |
+| T15  | TODO   |        |
 
 ### T1 — Collapse `internal/email` into `internal/mail`
 
@@ -330,6 +331,27 @@ not build the new shells, templates, partials, or CSS primitives here.
 - Fix small wording typos while touching the Sprint 4 docs, if any are
   present in the checked-in text.
 
+### T15 — Pre-Sprint-4 alignment
+
+Remove the small code/doc mismatches that would otherwise turn into
+layout-sprint speed bumps.
+
+- Fix the Sprint 4 user-detail route examples to match the actual route
+  contract: admin user pages are `/admin/users/:id` and
+  `/admin/users/:id/edit`, not `:handle`. Breadcrumb labels should still
+  display the user's handle; only the URL parameter is numeric.
+- Split `homeView` into separate `homePublicView` and `homeAuthedView`
+  structs. `home_public.html` moves to the auth shell in Sprint 4 and
+  should not carry app-shell fields; `home_authed.html` moves to the app
+  shell and needs the signed-in handle/admin state plus future breadcrumb
+  context. Keeping one shared struct makes the shell split harder to
+  reason about.
+- Add a small renderer smoke test before Sprint 4 changes layout
+  dispatch: rendering a page template should go through the current
+  layout, and rendering a partial template should render the partial
+  alone. Sprint 4 T2 can then update that baseline instead of adding
+  coverage from scratch while changing the renderer.
+
 ## Out of scope
 
 - Any new feature work. Sprint 3 is tech-debt burndown only.
@@ -339,8 +361,9 @@ not build the new shells, templates, partials, or CSS primitives here.
 Per AGENTS.md "Verification before saying 'done'":
 
 - `go build ./...` succeeds.
-- `go test ./...` passes (including the new T3 cross-origin tests
-  and the new T4 idempotent-migrate test).
+- `go test ./...` passes (including the new T3 cross-origin tests,
+  the new T4 idempotent-migrate test, and the new T15 renderer smoke
+  test).
 - `go vet ./...` is clean.
 - `huck db create --db /tmp/huck-sprint3.db` succeeds on a fresh
   path, and `huck db migrate --db /tmp/huck-sprint3.db` is a no-op

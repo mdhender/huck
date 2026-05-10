@@ -30,6 +30,13 @@ complete:
   redirects.
 - The `/admin` index redirect has been dropped or deliberately handled
   per Sprint 3 T11.
+- `homeView` has been split into auth-shell and app-shell view structs
+  per Sprint 3 T15.
+- A baseline renderer smoke test exists for the current page-vs-partial
+  dispatch before T2 changes the layout selection logic.
+- Admin user detail routes are confirmed as `/admin/users/:id` and
+  `/admin/users/:id/edit`; breadcrumb labels may use handles, but the
+  URL parameter remains numeric.
 - Renderer tests are green before changing the layout dispatch path.
 - Existing page templates have been reviewed for duplicated
   nav/header assumptions that the new app shell will own.
@@ -183,8 +190,8 @@ For each app-shell page:
 - Add the breadcrumbs in the handler that renders it. Examples:
   - `/admin/invites` → `[Home, Admin, Invites]`
   - `/admin/users` → `[Home, Admin, Users]`
-  - `/admin/users/:handle` → `[Home, Admin, Users, <handle>]`
-  - `/admin/users/:handle/edit` → `[Home, Admin, Users, <handle>, Edit]`
+  - `/admin/users/:id` → `[Home, Admin, Users, <handle>]`
+  - `/admin/users/:id/edit` → `[Home, Admin, Users, <handle>, Edit]`
   - `/` (authed) → `[Home]` (single crumb is fine; the partial
     will render it as the current page)
 - Wrap the H1 and any header-level actions in a
@@ -273,7 +280,7 @@ Per AGENTS.md "Verification before saying 'done'":
   - Public home, login, signup, error all render in the auth
     shell (centered, no sidebar).
   - Authed home, `/admin/invites`, `/admin/users`,
-    `/admin/users/:handle`, `/admin/users/:handle/edit` all
+    `/admin/users/:id`, `/admin/users/:id/edit` all
     render in the app shell with the correct sidebar items
     and breadcrumb trail.
   - Logging out from the topbar works and lands on the
