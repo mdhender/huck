@@ -64,8 +64,7 @@ internal/server/     # Echo wiring, renderer, middleware
 internal/auth/       # bcrypt, JWT, login/logout, guards
 internal/users/      # user store
 internal/invites/    # invite tokens, signup flow
-internal/mail/       # Mailer interface + Mailgun adapter
-internal/email/      # stdlib-only Mailgun HTTP client (used by mail)
+internal/mail/       # Mailer interface + stdlib-only Mailgun adapter
 migrations/          # NNNN_*.sql, embedded
 web/templates/       # layout.html, pages/, partials/, email/
 web/static/          # htmx, alpine, pico.min.css, app.css

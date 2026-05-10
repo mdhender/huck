@@ -2,6 +2,7 @@ package mail_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -112,6 +113,53 @@ func TestMailgunMailerSendHTTPError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "status=401") {
 		t.Fatalf("Send error = %q, want status=401", err)
+	}
+}
+
+func TestMailgunMailerSendContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	m, err := mail.NewMailgunMailer(mail.MailgunConfig{
+		Domain:  "sandbox.mailgun.org",
+		APIKey:  "key-test",
+		From:    "huck <noreply@example.com>",
+		APIBase: "https://api.mailgun.net",
+	})
+	if err != nil {
+		t.Fatalf("NewMailgunMailer: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = m.Send(ctx, "user@example.com", "subject", "<p>hello</p>")
+	if err == nil {
+		t.Fatal("Send: want error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Send error = %v, want context.Canceled", err)
+	}
+}
+
+func TestMailgunMailerSendInvalidBaseURL(t *testing.T) {
+	t.Parallel()
+
+	m, err := mail.NewMailgunMailer(mail.MailgunConfig{
+		Domain:  "sandbox.mailgun.org",
+		APIKey:  "key-test",
+		From:    "huck <noreply@example.com>",
+		APIBase: "://bad",
+	})
+	if err != nil {
+		t.Fatalf("NewMailgunMailer: %v", err)
+	}
+
+	err = m.Send(context.Background(), "user@example.com", "subject", "<p>hello</p>")
+	if err == nil {
+		t.Fatal("Send: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), "parse base url") {
+		t.Fatalf("Send error = %q, want parse base url", err)
 	}
 }
 

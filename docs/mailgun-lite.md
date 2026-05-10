@@ -1,12 +1,13 @@
 # Huck Mailgun Lite Package
 
-Status: implemented on 2026-05-09.
+Status: implemented on 2026-05-09; package collapsed into
+`internal/mail` on 2026-05-10 (Sprint 3 T1).
 
 ## Summary
 
 Huck no longer depends on `github.com/mailgun/mailgun-go/v5`.
-Mailgun delivery now goes through a tiny internal client in
-`internal/email` that uses only the Go standard library.
+Mailgun delivery now goes through a tiny stdlib-only client folded
+directly into `internal/mail`.
 
 This client is intentionally narrow. It supports only Huck's current
 transactional-email need: sending a single HTML email through the
@@ -15,34 +16,31 @@ Mailgun `POST /v3/{domain}/messages` API.
 ## Package Layout
 
 ```text
-internal/email/
-    mailgun.go
+internal/mail/
+    mail.go         # Mailer interface
+    fake.go         # in-memory Mailer for tests
+    mailgun.go      # stdlib-only Mailgun HTTP client + MailgunMailer
     mailgun_test.go
 ```
 
-`internal/mail` remains the application-facing package. Its
-`MailgunMailer` now wraps `internal/email.Send`.
+There is one `Mailer` abstraction (per `AGENTS.md`); `MailgunMailer`
+implements it directly without a separate `email` package wrapper.
 
 ## Public API
 
 ```go
-type Config struct {
-    APIKey        string
-    SendingDomain string
-    FromAddress   string
-    FromName      string
-    BaseURL       string
-    HTTPClient    *http.Client
+type MailgunConfig struct {
+    Domain  string
+    APIKey  string
+    From    string
+    APIBase string // empty = Mailgun US default
 }
 
-func (c Config) Configured() bool
+func NewMailgunMailer(cfg MailgunConfig) (*MailgunMailer, error)
 
-func Send(
+func (m *MailgunMailer) Send(
     ctx context.Context,
-    cfg Config,
-    to string,
-    subject string,
-    htmlBody string,
+    to, subject, htmlBody string,
 ) error
 ```
 
@@ -78,13 +76,11 @@ The implementation is covered with `net/http/httptest` only.
 
 Covered cases:
 
-* `Config.Configured`
-* from formatting with and without `FromName`
+* `NewMailgunMailer` config validation
 * successful send request shape
 * HTTP 401 handling
 * context cancellation
 * invalid base URL
-* `internal/mail.MailgunMailer` wrapper behavior
 
 ## Verification
 

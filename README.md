@@ -10,10 +10,10 @@ live in [docs/sprint-1.md](docs/sprint-1.md),
 [docs/sprint-2.md](docs/sprint-2.md), and
 [docs/sprint-3.md](docs/sprint-3.md).
 
-Email delivery uses Mailgun through a small internal stdlib-only client
-in `internal/email`, fronted by the `mail.Mailer` interface in
-`internal/mail`. See [docs/mailgun-lite.md](docs/mailgun-lite.md) for
-the rationale and verification notes.
+Email delivery uses Mailgun through a small, stdlib-only HTTP client
+folded directly into the `internal/mail` package and fronted by the
+`mail.Mailer` interface. See [docs/mailgun-lite.md](docs/mailgun-lite.md)
+for the rationale and verification notes.
 
 ## Quickstart
 
