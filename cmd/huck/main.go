@@ -136,6 +136,19 @@ func newServeCmd(cfg *config.Config, stderr io.Writer, parent *ff.FlagSet) *ff.C
 	return cmd
 }
 
+// runServe applies pending migrations on startup but never creates the
+// database file.
+//
+//  1. `huck serve` *will* run [db.Migrate] before serving traffic, so an
+//     operator does not need a separate deploy-time migration step.
+//  2. `huck serve` *will not* create the database file if it is missing —
+//     that remains exclusively `huck db create`'s job, surfaced here as
+//     [db.ErrMissing] from [db.Open].
+//  3. `huck db migrate` and `huck serve` share the same migration code
+//     path, so running `huck db migrate` immediately followed by
+//     `huck serve` is a no-op the second time.
+//
+// See docs/DESIGN.md §7.2 / §7.3 for the contract.
 func runServe(ctx context.Context, cfg *config.Config, _ io.Writer) error {
 	logger := slog.Default()
 

@@ -106,6 +106,45 @@ func TestMigrateIdempotentAndBootstrap(t *testing.T) {
 	}
 }
 
+// TestMigrateAfterCreateIsNoOp pins the `huck serve` startup contract
+// (DESIGN.md §7.2 / §7.3): Create has already migrated the file, so a
+// follow-up Migrate from the serve path must succeed and apply zero new
+// versions.
+func TestMigrateAfterCreateIsNoOp(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "huck.db")
+
+	if err := Create(path); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	pool, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	before, err := AppliedCount(pool)
+	if err != nil {
+		t.Fatalf("AppliedCount before: %v", err)
+	}
+	if before == 0 {
+		t.Fatal("expected Create to leave a fully migrated DB")
+	}
+
+	if err := Migrate(pool); err != nil {
+		t.Fatalf("Migrate after Create: %v", err)
+	}
+
+	after, err := AppliedCount(pool)
+	if err != nil {
+		t.Fatalf("AppliedCount after: %v", err)
+	}
+	if after != before {
+		t.Fatalf("expected idempotent Migrate; got %d then %d", before, after)
+	}
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, s := range haystack {
 		if s == needle {

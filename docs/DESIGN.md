@@ -187,6 +187,11 @@ If the file is missing the process exits with a fatal error pointing the
 user at `huck db create`. `huck db create` is the only code path that may
 create a new file.
 
+This split is deliberate: `huck serve` will *apply* pending migrations on
+startup (see §7.3), but it will *not* bootstrap a missing database. The
+operator runs `huck db create` once per deployment; `huck serve` then owns
+the run-time lifecycle.
+
 ### 7.3 Migrations
 
 Migrations live in `migrations/NNNN_<name>.sql` and are embedded with
@@ -197,6 +202,11 @@ Migrations are **append-only**. To change a released schema, write a new
 migration.
 
 `huck db migrate` runs them explicitly; `huck serve` runs them on startup.
+Both commands call the same `db.Migrate` code path, so running
+`huck db migrate` immediately followed by `huck serve` is a no-op the
+second time — the operator can keep migration as a separate deploy step
+without paying for it twice. The unit test
+`TestMigrateAfterCreateIsNoOp` in `internal/db` pins this guarantee.
 
 ### 7.4 Initial schema (`0001_init.sql`)
 
