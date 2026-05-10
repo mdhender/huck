@@ -201,7 +201,7 @@ pre-auth and post-auth pages need different shells.
 - Both layouts keep the existing `{{ block "title" }}`,
   `{{ block "content" }}`, `{{ block "scripts" }}` contract. For app
   pages, the layout may call `content` with the wrapped `.Page` value so
-  existing page templates do not need to use `.Page.CSRF`, `.Page.Rows`,
+  existing page templates do not need to use `.Page.Handle`, `.Page.Rows`,
   etc.
 - Drop the hard-coded `data-theme="light"` from `<html>` (plan §7).
   Follow `prefers-color-scheme` instead.
