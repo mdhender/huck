@@ -118,6 +118,7 @@ func (s *Server) installRoutes() {
 	s.echo.POST("/signup/:token", s.handleSignupSubmit)
 
 	admin := s.echo.Group("/admin", s.requireAdmin())
+	admin.GET("", s.handleAdminIndex)
 	admin.GET("/invites", s.handleAdminInvitesList)
 	admin.POST("/invites", s.handleAdminInvitesCreate)
 	admin.POST("/invites/:token/resend", s.handleAdminInvitesResend)
@@ -136,6 +137,13 @@ type homeView struct {
 	Handle string
 	Admin  bool
 	CSRF   string
+}
+
+// handleAdminIndex is the GET /admin landing. The home page's "Admin"
+// link points here; rather than a dedicated index page, redirect to
+// the invite list (the operator's most common entry point).
+func (s *Server) handleAdminIndex(c *echo.Context) error {
+	return c.Redirect(http.StatusSeeOther, "/admin/invites")
 }
 
 // handleHome renders home_public.html for anonymous visitors and
