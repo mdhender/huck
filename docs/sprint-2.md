@@ -212,7 +212,7 @@ pass and a commit lands on `main`.
   *Acceptance:* `go test ./internal/server/...` passes; manual run
   with the fake mailer can complete a signup end-to-end.
 
-- [ ] **T6 — Route guards + admin invite pages.**
+- [x] **T6 — Route guards + admin invite pages.** ✅ `4206d03`
   `RequireAuth` (the existing `echo-jwt` middleware) and `RequireAdmin`
   (wrap, then check `claims.Admin`, else 403) in `internal/auth` (or
   `internal/server/middleware.go` — match whichever the existing layout
