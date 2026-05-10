@@ -29,7 +29,12 @@ func (s *Server) installErrorHandler() {
 		status := http.StatusInternalServerError
 		message := "Something went wrong."
 
+		// Echo v5 returns its unexported *httpError (not *echo.HTTPError) for
+		// router misses like ErrNotFound and ErrMethodNotAllowed, so the
+		// HTTPStatusCoder interface is the portable extraction path. Check
+		// *echo.HTTPError first so its Message field still surfaces to the user.
 		var he *echo.HTTPError
+		var sc echo.HTTPStatusCoder
 		switch {
 		case errors.Is(err, invites.ErrNotFound):
 			status = http.StatusNotFound
@@ -47,6 +52,9 @@ func (s *Server) installErrorHandler() {
 			} else {
 				message = http.StatusText(status)
 			}
+		case errors.As(err, &sc):
+			status = sc.StatusCode()
+			message = http.StatusText(status)
 		default:
 			message = http.StatusText(status)
 			s.logger.Error("unhandled handler error", "err", err, "path", c.Request().URL.Path)
