@@ -322,20 +322,21 @@ Huck's deployment contract:
 
 - **Production:** Nginx terminates TLS in front of the Go process and
   is configured with `ssl_protocols TLSv1.3;` (no TLSv1.2 fallback).
-  See §12 for the relevant snippet. The Go listener only ever speaks
-  plaintext to the local Nginx, so no TLS-1.3 enforcement is needed
-  inside the binary.
+  The Go listener only ever speaks plaintext to the local Nginx, so
+  no TLS-1.3 enforcement is needed inside the binary. The full proxy
+  contract — required headers, sample config, and the operational
+  checklist — lives in [`docs/nginx-proxy.md`](./nginx-proxy.md); §12.1
+  carries only the TLS-protocol summary.
 - **Local dev / `huck serve` direct:** out of scope for the TLS-1.3
   contract. Dev runs on `localhost`, which browsers treat as a Secure
   Context regardless of HTTPS (so `Sec-Fetch-Site` is still emitted);
   the slightly larger residual window is accepted in exchange for an
   HTTP-only dev loop.
 
-**Open question (sprint-3 T3.2):** confirm before closing the sprint
-that the production Nginx config we plan to ship pins
-`ssl_protocols TLSv1.3;`. If TLS 1.3 cannot be enforced at Nginx,
-record the wider residual risk in this section and rely more heavily
-on `SameSite=Lax` + HSTS.
+The project has decided not to support incompatible legacy clients, so
+the production Nginx config pins `ssl_protocols TLSv1.3;` with no
+TLSv1.2 fallback. No further mitigations are needed; this resolves the
+open question that was tracked against sprint-3 T3.2.
 
 ### 8.6 Authorisation guards
 
@@ -549,9 +550,12 @@ ssl_protocols TLSv1.3;
 ssl_prefer_server_ciphers off;
 ```
 
-If a deployment cannot enforce TLS 1.3 at Nginx, note it in the
-deployment runbook and rely more heavily on the `SameSite=Lax` + HSTS
-combination described in §8.5.
+The full Nginx contract — required headers (notably
+`proxy_set_header Host $host;`), a copy-paste-ready sample server
+block, and the pre-release operational checklist — lives in
+[`docs/nginx-proxy.md`](./nginx-proxy.md). This section deliberately
+only owns the TLS-protocol pin; everything else is delegated to that
+doc to keep one source of truth for DevOps.
 
 ## 13. Error handling
 
@@ -605,3 +609,8 @@ design.
   defence-in-depth now relies on `SameSite=Lax` + cross-origin
   middleware + HSTS, and the production TLS-1.3 / Nginx contract is
   captured in §12.1.
+- **2026-05-10** — Nginx reverse-proxy contract extracted to
+  [`docs/nginx-proxy.md`](./nginx-proxy.md); §8.5 and §12.1 now link
+  to it. Open question on `ssl_protocols TLSv1.3;` resolved: the
+  project will not support incompatible legacy clients, so TLS 1.3
+  is pinned with no TLSv1.2 fallback.
