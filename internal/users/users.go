@@ -104,6 +104,105 @@ func (s *Store) GetByID(ctx context.Context, id int64) (User, error) {
 		FROM users WHERE id = ?;`, id)
 }
 
+// ListAll returns every user, most recent first. Used by the admin
+// users page.
+func (s *Store) ListAll(ctx context.Context) ([]User, error) {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer s.pool.Put(conn)
+
+	var out []User
+	err = sqlitex.Execute(conn,
+		`SELECT id, handle, email, password_hash, is_admin, created_at, updated_at
+		   FROM users ORDER BY created_at DESC;`,
+		&sqlitex.ExecOptions{
+			ResultFunc: func(stmt *sqlite.Stmt) error {
+				out = append(out, User{
+					ID:           stmt.ColumnInt64(0),
+					Handle:       stmt.ColumnText(1),
+					Email:        stmt.ColumnText(2),
+					PasswordHash: stmt.ColumnText(3),
+					IsAdmin:      stmt.ColumnInt64(4) != 0,
+					CreatedAt:    parseTime(stmt.ColumnText(5)),
+					UpdatedAt:    parseTime(stmt.ColumnText(6)),
+				})
+				return nil
+			},
+		})
+	if err != nil {
+		return nil, fmt.Errorf("users: list: %w", err)
+	}
+	return out, nil
+}
+
+// SetAdmin toggles the is_admin flag on the row identified by id and
+// bumps updated_at. Returns ErrNotFound when no row matches.
+func (s *Store) SetAdmin(ctx context.Context, id int64, isAdmin bool) error {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.pool.Put(conn)
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := sqlitex.Execute(conn,
+		`UPDATE users SET is_admin = ?, updated_at = ? WHERE id = ?;`,
+		&sqlitex.ExecOptions{Args: []any{boolToInt(isAdmin), now, id}}); err != nil {
+		return fmt.Errorf("users: set admin: %w", err)
+	}
+	if conn.Changes() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetPassword stores a new bcrypt hash for the user. Returns ErrNotFound
+// when no row matches. The caller is responsible for hashing plaintext
+// before invoking this method; the users package never sees plaintext.
+func (s *Store) SetPassword(ctx context.Context, id int64, passwordHash string) error {
+	if passwordHash == "" {
+		return errors.New("users: password hash is required")
+	}
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.pool.Put(conn)
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := sqlitex.Execute(conn,
+		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?;`,
+		&sqlitex.ExecOptions{Args: []any{passwordHash, now, id}}); err != nil {
+		return fmt.Errorf("users: set password: %w", err)
+	}
+	if conn.Changes() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Delete hard-deletes the user row. Returns ErrNotFound when no row
+// matches.
+func (s *Store) Delete(ctx context.Context, id int64) error {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.pool.Put(conn)
+
+	if err := sqlitex.Execute(conn,
+		`DELETE FROM users WHERE id = ?;`,
+		&sqlitex.ExecOptions{Args: []any{id}}); err != nil {
+		return fmt.Errorf("users: delete: %w", err)
+	}
+	if conn.Changes() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // AdminExists reports whether at least one row has is_admin = 1.
 func (s *Store) AdminExists(ctx context.Context) (bool, error) {
 	conn, err := s.pool.Take(ctx)

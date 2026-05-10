@@ -122,6 +122,11 @@ func (s *Server) installRoutes() {
 	admin.POST("/invites", s.handleAdminInvitesCreate)
 	admin.POST("/invites/:token/resend", s.handleAdminInvitesResend)
 	admin.POST("/invites/:token/revoke", s.handleAdminInvitesRevoke)
+	admin.GET("/users", s.handleAdminUsersList)
+	admin.GET("/users/:id", s.handleAdminUsersView)
+	admin.GET("/users/:id/edit", s.handleAdminUsersEditForm)
+	admin.POST("/users/:id/edit", s.handleAdminUsersEditSubmit)
+	admin.POST("/users/:id/delete", s.handleAdminUsersDelete)
 }
 
 // homeView is the data shape consumed by both home_public.html and

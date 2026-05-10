@@ -118,3 +118,100 @@ func TestGetByHandleNotFound(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+func TestListAll(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	ctx := context.Background()
+
+	if _, err := s.Create(ctx, users.NewUser{Handle: "alice", Email: "a@x", PasswordHash: "h", IsAdmin: true}); err != nil {
+		t.Fatalf("Create alice: %v", err)
+	}
+	if _, err := s.Create(ctx, users.NewUser{Handle: "bob", Email: "b@x", PasswordHash: "h"}); err != nil {
+		t.Fatalf("Create bob: %v", err)
+	}
+
+	all, err := s.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("len = %d, want 2", len(all))
+	}
+}
+
+func TestSetAdmin(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	ctx := context.Background()
+
+	u, err := s.Create(ctx, users.NewUser{Handle: "alice", Email: "a@x", PasswordHash: "h", IsAdmin: true})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := s.SetAdmin(ctx, u.ID, false); err != nil {
+		t.Fatalf("SetAdmin false: %v", err)
+	}
+	got, err := s.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.IsAdmin {
+		t.Errorf("IsAdmin = true, want false after SetAdmin(false)")
+	}
+	if !got.UpdatedAt.After(u.UpdatedAt) {
+		t.Errorf("updated_at not bumped: %v vs %v", got.UpdatedAt, u.UpdatedAt)
+	}
+
+	if err := s.SetAdmin(ctx, 9999, true); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("SetAdmin missing id: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSetPassword(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	ctx := context.Background()
+
+	u, err := s.Create(ctx, users.NewUser{Handle: "alice", Email: "a@x", PasswordHash: "old", IsAdmin: false})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := s.SetPassword(ctx, u.ID, "new"); err != nil {
+		t.Fatalf("SetPassword: %v", err)
+	}
+	got, err := s.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.PasswordHash != "new" {
+		t.Errorf("PasswordHash = %q, want %q", got.PasswordHash, "new")
+	}
+
+	if err := s.SetPassword(ctx, u.ID, ""); err == nil {
+		t.Error("SetPassword empty: expected error")
+	}
+	if err := s.SetPassword(ctx, 9999, "x"); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("SetPassword missing id: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	ctx := context.Background()
+
+	u, err := s.Create(ctx, users.NewUser{Handle: "alice", Email: "a@x", PasswordHash: "h"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := s.Delete(ctx, u.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := s.GetByID(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("after Delete: want ErrNotFound, got %v", err)
+	}
+	if err := s.Delete(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("Delete twice: want ErrNotFound, got %v", err)
+	}
+}

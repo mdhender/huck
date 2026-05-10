@@ -1,0 +1,81 @@
+{{ define "title" }}huck — edit {{ .User.Handle }}{{ end }}
+
+{{ define "content" }}
+<header>
+    <nav>
+        <ul>
+            <li><strong>huck</strong></li>
+            <li>admin</li>
+            <li><a href="/admin/users">users</a></li>
+            <li><a href="/admin/users/{{ .User.ID }}">{{ .User.Handle }}</a></li>
+        </ul>
+        <ul>
+            <li>signed in as <em>{{ .Handle }}</em></li>
+            <li>
+                <form class="inline" method="post" action="/logout">
+                    <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+                    <button type="submit" class="secondary">Sign out</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+    <h1>Edit {{ .User.Handle }}</h1>
+</header>
+
+<article>
+    {{ if .Error }}
+        <p><strong>{{ .Error }}</strong></p>
+    {{ end }}
+    {{ if .Notice }}
+        <p><em>{{ .Notice }}</em></p>
+    {{ end }}
+
+    <p><small>Handle and email are immutable after creation.</small></p>
+    <dl>
+        <dt>Handle</dt>
+        <dd>{{ .User.Handle }}</dd>
+        <dt>Email</dt>
+        <dd>{{ .User.Email }}</dd>
+    </dl>
+
+    <form method="post" action="/admin/users/{{ .User.ID }}/edit">
+        <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+
+        <fieldset>
+            <legend>Role</legend>
+            <label>
+                <input type="checkbox" name="is_admin" value="1"
+                       {{ if .IsSelf }}disabled{{ end }}
+                       {{ if .User.IsAdmin }}checked{{ end }}>
+                Administrator
+            </label>
+            {{ if .IsSelf }}
+                <small>You cannot demote yourself. Ask another admin.</small>
+                <input type="hidden" name="is_admin" value="1">
+            {{ end }}
+        </fieldset>
+
+        <fieldset>
+            <legend>Reset password</legend>
+            <label>
+                New password
+                <input type="password" name="password" autocomplete="new-password"
+                       placeholder="Leave blank to keep current password">
+            </label>
+            <small>12–128 characters. Leave blank to keep the current password.</small>
+        </fieldset>
+
+        <button type="submit">Save changes</button>
+        <a href="/admin/users/{{ .User.ID }}" role="button" class="secondary">Cancel</a>
+    </form>
+
+    {{ if not .IsSelf }}
+        <hr>
+        <form method="post" action="/admin/users/{{ .User.ID }}/delete"
+              onsubmit="return confirm('Delete user {{ .User.Handle }}? This cannot be undone.');">
+            <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+            <button type="submit" class="contrast">Delete user</button>
+        </form>
+    {{ end }}
+</article>
+{{ end }}
