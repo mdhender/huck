@@ -71,12 +71,11 @@ func TestLoginLogoutFlow(t *testing.T) {
 		},
 	}
 
-	// 2. GET /login to grab the CSRF cookie.
+	// 2. GET /login. The _csrf cookie is gone after T3.1 swapped Echo's
+	// double-submit middleware for http.CrossOriginProtection; T3.2 will
+	// strip the form-field plumbing entirely.
 	mustGet(t, client, ts.URL+"/login", http.StatusOK)
 	csrf := jar.value("_csrf")
-	if csrf == "" {
-		t.Fatal("no _csrf cookie set after GET /login")
-	}
 
 	// 3. POST /login with cookie + token + credentials.
 	resp := mustPost(t, client, ts.URL+"/login", url.Values{
@@ -165,25 +164,54 @@ func TestLoginRejectsBadPassword(t *testing.T) {
 	}
 }
 
-// TestCSRFRejected makes sure POST /login without the CSRF token is denied.
-func TestCSRFRejected(t *testing.T) {
+// TestCrossOriginRejected exercises the http.CrossOriginProtection
+// middleware installed by installMiddleware: a state-changing POST
+// flagged by the browser as cross-site must return 403.
+func TestCrossOriginRejected(t *testing.T) {
 	t.Parallel()
 	ts, _, client := newTestServer(t)
 	t.Cleanup(ts.Close)
 
-	resp, err := client.PostForm(ts.URL+"/login", url.Values{
+	resp := postWithFetchSite(t, client, ts.URL+"/login", "cross-site", url.Values{
 		"handle":   {"alice"},
 		"password": {"hunter2"},
 	})
-	if err != nil {
-		t.Fatalf("PostForm: %v", err)
-	}
 	defer resp.Body.Close()
-	// Echo's CSRF middleware returns 400 when the token is missing entirely
-	// and 403 when present-but-wrong. Either should block the login.
-	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("missing CSRF should be rejected (4xx), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("cross-site POST should be rejected with 403, got %d", resp.StatusCode)
 	}
+}
+
+// TestSameOriginAllowed is the matched happy-path counterpart: the
+// same login request marked Sec-Fetch-Site: same-origin must succeed.
+func TestSameOriginAllowed(t *testing.T) {
+	t.Parallel()
+	ts, _, client := newTestServer(t)
+	t.Cleanup(ts.Close)
+
+	resp := postWithFetchSite(t, client, ts.URL+"/login", "same-origin", url.Values{
+		"handle":   {"alice"},
+		"password": {"hunter2"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("same-origin login should succeed with 303, got %d", resp.StatusCode)
+	}
+}
+
+func postWithFetchSite(t *testing.T, c *http.Client, u, site string, form url.Values) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest("POST", u, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", site)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", u, err)
+	}
+	return resp
 }
 
 // --- helpers -------------------------------------------------------------

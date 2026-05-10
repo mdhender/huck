@@ -81,7 +81,7 @@ Rules:
 |------|--------|--------|-------|
 | T1   | DONE   |        | Folded the stdlib Mailgun HTTP client into `internal/mail`; deleted `internal/email/`; updated AGENTS.md, README.md, and docs/mailgun-lite.md. |
 | T2   | DONE   |        | Repurposed `cmd/sendtest` as the documented Mailgun smoke-test: switched to `internal/config` + `ff.Parse` (`HUCK_MAILGUN_*` env vars unchanged), added a real `--to` flag, factored `Config.ValidateMailer`/`missingMailerFlags` shared with `ValidateServe`, and added `cmd/sendtest/README.md`. |
-| T3.1 | TODO   |        |       |
+| T3.1 | DONE   |        | Replaced Echo's double-submit `_csrf` middleware with `http.NewCrossOriginProtection()` mounted as an Echo middleware adapter in `internal/server/middleware.go`; replaced `TestCSRFRejected` with `TestCrossOriginRejected` + `TestSameOriginAllowed`. Per the task scope, `csrfToken`, `CSRF` view fields, the `_csrf` form fields, and the `app.js` header mirror are intentionally left for T3.2; existing tests had `t.Fatal("no _csrf cookie set")` assertions that were dropped to keep the test suite green with the smallest diff. |
 | T3.2 | TODO   |        |       |
 | T4   | TODO   |        |       |
 | T5   | TODO   |        |       |

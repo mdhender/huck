@@ -154,10 +154,10 @@ func TestSignupGoldenPath(t *testing.T) {
 	if !strings.Contains(body, "alice@example.com") {
 		t.Errorf("signup form should pre-fill the invite email; got: %s", trim(body))
 	}
+	// _csrf is empty after T3.1 dropped the double-submit middleware;
+	// T3.2 will strip the form field. Leaving the plumbing in place
+	// keeps the diff minimal for now.
 	csrf := jar.value("_csrf")
-	if csrf == "" {
-		t.Fatal("no _csrf cookie set after GET /signup/:token")
-	}
 
 	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
 		"_csrf":    {csrf},

@@ -63,6 +63,25 @@ func currentClaims(c *echo.Context) *auth.Claims {
 	return nil
 }
 
+// crossOriginProtection delegates to net/http.CrossOriginProtection
+// (Go 1.25+), the stdlib replacement for the older double-submit
+// _csrf cookie scheme. The default ruleset rejects state-changing
+// browser requests whose Sec-Fetch-Site or Origin headers mark them
+// as cross-origin; safe methods (GET/HEAD/OPTIONS) and non-browser
+// requests pass through. Huck is single-origin, so no
+// AddTrustedOrigin call is needed.
+func crossOriginProtection() echo.MiddlewareFunc {
+	cop := http.NewCrossOriginProtection()
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			if err := cop.Check(c.Request()); err != nil {
+				return echo.NewHTTPError(http.StatusForbidden, "cross-origin request blocked")
+			}
+			return next(c)
+		}
+	}
+}
+
 // securityHeaders sets the headers from docs/DESIGN.md §12 on every
 // response. HSTS is only set when --cookie-secure is on; that flag means
 // "we expect to be served over HTTPS".

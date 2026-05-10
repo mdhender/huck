@@ -88,16 +88,10 @@ func (s *Server) installMiddleware() {
 	s.echo.Use(requestLogger(s.logger))
 	s.echo.Use(middleware.Recover())
 	s.echo.Use(securityHeaders(s.cfg.CookieSecure))
-
-	s.echo.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
-		TokenLookup:    "header:X-CSRF-Token,form:_csrf",
-		CookieName:     "_csrf",
-		CookiePath:     "/",
-		CookieSecure:   s.cfg.CookieSecure,
-		CookieHTTPOnly: false, // JS must read it to mirror into the header.
-		CookieSameSite: http.SameSiteLaxMode,
-		CookieMaxAge:   86400,
-	}))
+	// Mounted as Echo middleware (rather than wrapping srv.Echo() in
+	// cmd/huck/runServe) so all request-shaping middleware lives in one
+	// place and httptest in this package exercises the same chain.
+	s.echo.Use(crossOriginProtection())
 }
 
 func (s *Server) installStatic() error {

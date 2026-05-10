@@ -110,10 +110,9 @@ func (f *adminFixture) signIn(t *testing.T, handle string) (*http.Client, *jarHe
 		},
 	}
 	mustGet(t, client, f.ts.URL+"/login", http.StatusOK)
+	// _csrf form value is now an empty string after T3.1 removed the
+	// double-submit middleware; T3.2 strips the field entirely.
 	csrf := jar.value("_csrf")
-	if csrf == "" {
-		t.Fatal("no _csrf cookie set after GET /login")
-	}
 	resp := mustPost(t, client, f.ts.URL+"/login", url.Values{
 		"_csrf":    {csrf},
 		"handle":   {handle},
