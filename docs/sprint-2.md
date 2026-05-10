@@ -232,7 +232,7 @@ pass and a commit lands on `main`.
   list/create/resend/revoke through the UI; fake mailer captures
   bodies in tests.
 
-- [x] **T7 — Admin user pages (list/view/edit/delete).**
+- [x] **T7 — Admin user pages (list/view/edit/delete).** ✅ `7158c82`
   Templates: `pages/admin_users.html` (list), `pages/admin_user_edit.html`
   (toggle `is_admin`, reset password). Handlers:
   - `GET /admin/users` — list (handle, email, is_admin, created_at).
