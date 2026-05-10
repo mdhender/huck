@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `AGENTS.md` — hard rules, stack pins, conventions. **Re-read before any non-trivial change.** The "Hard rules" section is non-negotiable.
 - `docs/DESIGN.md` — full architectural design. Schema/flag/policy decisions live here. If you need to deviate, update DESIGN.md first, then AGENTS.md, then write code.
-- `docs/sprint-1.md`, `docs/sprint-2.md` — implementation plans for the in-progress sprints.
+- `docs/sprint-1.md`, `docs/sprint-2.md`, `docs/sprint-3.md` — implementation plans for the in-progress sprints. `docs/sprint-4.md` is a forward-looking front-end layout sprint that begins after Sprint 3 closes.
 
 ## Build, test, run
 

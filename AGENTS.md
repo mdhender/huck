@@ -55,17 +55,21 @@ approval.
 
 ```
 cmd/huck/            # entry point, ff/v4 command tree
+cmd/sendtest/        # Mailgun smoke-test binary (operator tool)
 internal/config/     # flag + env + file binding
+internal/cerrs/      # constant sentinel errors
 internal/db/         # open, create, migrate (zombiezen)
+internal/dotenv/     # .env loader (HUCK_ENV-aware)
 internal/server/     # Echo wiring, renderer, middleware
 internal/auth/       # bcrypt, JWT, login/logout, guards
 internal/users/      # user store
 internal/invites/    # invite tokens, signup flow
-internal/mail/       # Mailer interface + Mailgun impl
-migrations/          # 0001_init.sql, embedded
-web/templates/       # layout.html, pages/, partials/
+internal/mail/       # Mailer interface + Mailgun adapter
+internal/email/      # stdlib-only Mailgun HTTP client (used by mail)
+migrations/          # NNNN_*.sql, embedded
+web/templates/       # layout.html, pages/, partials/, email/
 web/static/          # htmx, alpine, pico.min.css, app.css
-docs/                # DESIGN.md and other design notes
+docs/                # DESIGN.md, sprint plans, front-end notes
 ```
 
 ## Conventions

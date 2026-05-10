@@ -6,8 +6,9 @@ and uses SQLite for persistence. Authentication is invite-only and uses
 JWT in an HttpOnly cookie.
 
 The full design lives in [docs/DESIGN.md](docs/DESIGN.md). Sprint plans
-live in [docs/sprint-1.md](docs/sprint-1.md) and
-[docs/sprint-2.md](docs/sprint-2.md).
+live in [docs/sprint-1.md](docs/sprint-1.md),
+[docs/sprint-2.md](docs/sprint-2.md), and
+[docs/sprint-3.md](docs/sprint-3.md).
 
 Email delivery uses Mailgun through a small internal stdlib-only client
 in `internal/email`, fronted by the `mail.Mailer` interface in
@@ -107,3 +108,4 @@ Project contributors include:
 * Michael D Henderson
 * OpenAI Codex
 * Anthropic Claude
+* Sourcegraph Amp
