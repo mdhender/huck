@@ -2,11 +2,66 @@ package server
 
 import (
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
+
+	"github.com/mdhender/huck/internal/auth"
 )
+
+// claimsContextKey is the c.Get/c.Set key under which requireAuth stashes
+// the parsed claims so downstream handlers can read them without
+// re-parsing the cookie.
+const claimsContextKey = "auth.claims"
+
+// requireAuth is the gate for routes that need an authenticated user. A
+// missing/invalid/expired cookie sends the user to /login (HX-Redirect
+// for HTMX, 303 otherwise). On success the typed claims are stashed in
+// the context under claimsContextKey.
+func (s *Server) requireAuth() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			claims, ok := s.bestEffortClaims(c)
+			if !ok {
+				if c.Request().Header.Get("HX-Request") == "true" {
+					c.Response().Header().Set("HX-Redirect", "/login")
+					return c.NoContent(http.StatusNoContent)
+				}
+				return c.Redirect(http.StatusSeeOther, "/login")
+			}
+			c.Set(claimsContextKey, claims)
+			return next(c)
+		}
+	}
+}
+
+// requireAdmin runs requireAuth and then refuses non-admin authed users
+// with 403. The central error handler renders the friendly error page.
+func (s *Server) requireAdmin() echo.MiddlewareFunc {
+	authMW := s.requireAuth()
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return authMW(func(c *echo.Context) error {
+			claims := currentClaims(c)
+			if claims == nil || !claims.Admin {
+				return echo.NewHTTPError(http.StatusForbidden, "Admin access required.")
+			}
+			return next(c)
+		})
+	}
+}
+
+// currentClaims returns the claims stashed by requireAuth, or nil if
+// the middleware was not in the chain.
+func currentClaims(c *echo.Context) *auth.Claims {
+	if v := c.Get(claimsContextKey); v != nil {
+		if claims, ok := v.(*auth.Claims); ok {
+			return claims
+		}
+	}
+	return nil
+}
 
 // securityHeaders sets the headers from docs/DESIGN.md §12 on every
 // response. HSTS is only set when --cookie-secure is on; that flag means

@@ -1,0 +1,68 @@
+{{ define "title" }}huck — admin invites{{ end }}
+
+{{ define "content" }}
+<header>
+    <nav>
+        <ul>
+            <li><strong>huck</strong></li>
+            <li>admin</li>
+        </ul>
+        <ul>
+            <li>signed in as <em>{{ .Handle }}</em></li>
+            <li><a href="/">Home</a></li>
+            <li>
+                <form class="inline" method="post" action="/logout">
+                    <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+                    <button type="submit" class="secondary">Sign out</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+    <h1>Invites</h1>
+</header>
+
+<article>
+    {{ if .Error }}
+        <p><strong>{{ .Error }}</strong></p>
+    {{ end }}
+    {{ if .Notice }}
+        <p><em>{{ .Notice }}</em></p>
+    {{ end }}
+    <form method="post" action="/admin/invites">
+        <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+        <label>
+            Email
+            <input type="email" name="email" required autofocus
+                   value="{{ .FormEmail }}"
+                   placeholder="newuser@example.com">
+        </label>
+        <button type="submit">Send invite</button>
+    </form>
+</article>
+
+<article>
+    <h2>Existing invites</h2>
+    {{ if .Rows }}
+        <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Email</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Created</th>
+                    <th scope="col">Expires</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Rows }}
+                    {{ template "partials/invite_row.html" . }}
+                {{ end }}
+            </tbody>
+        </table>
+        </figure>
+    {{ else }}
+        <p><em>No invites yet. Send one above to get started.</em></p>
+    {{ end }}
+</article>
+{{ end }}

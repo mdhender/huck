@@ -1,0 +1,31 @@
+{{ define "partials/invite_row.html" -}}
+<tr id="invite-{{ .Token }}">
+    <td>{{ .Email }}</td>
+    <td>{{ .Status }}</td>
+    <td><time datetime="{{ .CreatedAtISO }}">{{ .CreatedAt }}</time></td>
+    <td><time datetime="{{ .ExpiresAtISO }}">{{ .ExpiresAt }}</time></td>
+    <td>
+        {{ if .CanResend }}
+            <form method="post"
+                  action="/admin/invites/{{ .Token }}/resend"
+                  hx-post="/admin/invites/{{ .Token }}/resend"
+                  hx-target="#invite-{{ .Token }}"
+                  hx-swap="outerHTML"
+                  style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+                <button type="submit" class="secondary">Resend</button>
+            </form>
+            <form method="post"
+                  action="/admin/invites/{{ .Token }}/revoke"
+                  hx-post="/admin/invites/{{ .Token }}/revoke"
+                  hx-target="#invite-{{ .Token }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Revoke invite for {{ .Email }}?"
+                  style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ .CSRF }}">
+                <button type="submit" class="contrast">Revoke</button>
+            </form>
+        {{ end }}
+    </td>
+</tr>
+{{- end }}

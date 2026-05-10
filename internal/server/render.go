@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
-	"path"
 	"strings"
 
 	"github.com/labstack/echo/v5"
@@ -43,6 +42,18 @@ func NewRenderer() (*Renderer, error) {
 		return nil, fmt.Errorf("server: parse layout: %w", err)
 	}
 
+	// Parse all partials together; each defines its own template name.
+	partialPaths, err := fs.Glob(web.Templates, "templates/partials/*.html")
+	if err != nil {
+		return nil, fmt.Errorf("server: glob partials: %w", err)
+	}
+	r.partials = template.New("partials")
+	if len(partialPaths) > 0 {
+		if _, err := r.partials.ParseFS(web.Templates, partialPaths...); err != nil {
+			return nil, fmt.Errorf("server: parse partials: %w", err)
+		}
+	}
+
 	pages, err := fs.Glob(web.Templates, "templates/pages/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("server: glob pages: %w", err)
@@ -55,6 +66,12 @@ func NewRenderer() (*Renderer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("server: clone layout: %w", err)
 		}
+		// Make partials available to pages via {{ template "partials/foo.html" . }}.
+		if len(partialPaths) > 0 {
+			if _, err := clone.ParseFS(web.Templates, partialPaths...); err != nil {
+				return nil, fmt.Errorf("server: parse partials into %s: %w", p, err)
+			}
+		}
 		if _, err := clone.ParseFS(web.Templates, p); err != nil {
 			return nil, fmt.Errorf("server: parse %s: %w", p, err)
 		}
@@ -62,18 +79,6 @@ func NewRenderer() (*Renderer, error) {
 		// the file path under templates/.
 		key := strings.TrimPrefix(p, "templates/")
 		r.pages[key] = clone
-	}
-
-	// Parse all partials together; each defines its own template name.
-	partialPaths, err := fs.Glob(web.Templates, "templates/partials/*.html")
-	if err != nil {
-		return nil, fmt.Errorf("server: glob partials: %w", err)
-	}
-	r.partials = template.New("partials")
-	if len(partialPaths) > 0 {
-		if _, err := r.partials.ParseFS(web.Templates, partialPaths...); err != nil {
-			return nil, fmt.Errorf("server: parse partials: %w", err)
-		}
 	}
 
 	// Email templates live in their own tree: no layout, executed as a
@@ -106,7 +111,10 @@ func (r *Renderer) RenderEmail(name string, data any) (string, error) {
 func (r *Renderer) Render(c *echo.Context, w io.Writer, name string, data any) error {
 	switch {
 	case strings.HasPrefix(name, "partials/"):
-		return r.partials.ExecuteTemplate(w, path.Base(name), data)
+		// Partials are registered under their full "partials/foo.html"
+		// name via {{ define "partials/foo.html" }}. Execute by the same
+		// name so we render the body, not the empty file template.
+		return r.partials.ExecuteTemplate(w, name, data)
 	case strings.HasPrefix(name, "pages/"):
 		page, ok := r.pages[name]
 		if !ok {

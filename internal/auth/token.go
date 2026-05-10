@@ -27,6 +27,20 @@ type Claims struct {
 	Admin  bool   `json:"admin"`
 }
 
+// UserID returns the user id encoded in the Subject claim. Returns 0
+// when Subject is missing or unparseable; callers that need a non-zero
+// id should treat that as an error.
+func (c *Claims) UserID() int64 {
+	if c == nil {
+		return 0
+	}
+	id, err := strconv.ParseInt(c.Subject, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
 // Issue signs a new JWT for the given user.
 func Issue(u users.User, key []byte, ttl time.Duration) (string, error) {
 	if len(key) == 0 {

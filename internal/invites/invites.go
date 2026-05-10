@@ -57,6 +57,19 @@ func NewStore(pool *sqlitex.Pool) *Store { return &Store{pool: pool} }
 // returns ErrEmailAlreadyInvited so the admin endpoint can map it to
 // HTTP 409 (DESIGN.md §9 step 1).
 func (s *Store) Create(ctx context.Context, email string, invitedBy int64) (Invite, error) {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return Invite{}, err
+	}
+	defer s.pool.Put(conn)
+	return s.CreateOnConn(conn, email, invitedBy)
+}
+
+// CreateOnConn is the connection-scoped sibling of Create. The admin
+// invite handler runs Create + Mailgun Send inside one
+// sqlitex.Transaction so that a Mailgun failure rolls the row back; the
+// caller owns the transaction boundary on conn.
+func (s *Store) CreateOnConn(conn *sqlite.Conn, email string, invitedBy int64) (Invite, error) {
 	email = normaliseEmail(email)
 	if email == "" {
 		return Invite{}, errors.New("invites: email is required")
@@ -69,12 +82,6 @@ func (s *Store) Create(ctx context.Context, email string, invitedBy int64) (Invi
 	if err != nil {
 		return Invite{}, err
 	}
-
-	conn, err := s.pool.Take(ctx)
-	if err != nil {
-		return Invite{}, err
-	}
-	defer s.pool.Put(conn)
 
 	now := time.Now().UTC()
 	expires := now.Add(ttl)
@@ -101,6 +108,41 @@ func (s *Store) Create(ctx context.Context, email string, invitedBy int64) (Invi
 		CreatedAt: now,
 		ExpiresAt: expires,
 	}, nil
+}
+
+// ListAll returns every invite, most recent first. The admin invite
+// page renders the result as a table.
+func (s *Store) ListAll(ctx context.Context) ([]Invite, error) {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer s.pool.Put(conn)
+
+	var out []Invite
+	err = sqlitex.Execute(conn,
+		`SELECT token, email, invited_by, created_at, expires_at, consumed_at
+		   FROM invites ORDER BY created_at DESC;`,
+		&sqlitex.ExecOptions{
+			ResultFunc: func(stmt *sqlite.Stmt) error {
+				inv := Invite{
+					Token:     Token(stmt.ColumnText(0)),
+					Email:     stmt.ColumnText(1),
+					InvitedBy: stmt.ColumnInt64(2),
+					CreatedAt: parseTime(stmt.ColumnText(3)),
+					ExpiresAt: parseTime(stmt.ColumnText(4)),
+				}
+				if stmt.ColumnType(5) != sqlite.TypeNull {
+					inv.ConsumedAt = parseTime(stmt.ColumnText(5))
+				}
+				out = append(out, inv)
+				return nil
+			},
+		})
+	if err != nil {
+		return nil, fmt.Errorf("invites: list: %w", err)
+	}
+	return out, nil
 }
 
 // GetByToken looks up an invite by its token. Returns ErrNotFound when

@@ -116,6 +116,12 @@ func (s *Server) installRoutes() {
 	s.echo.POST("/logout", s.handleLogout)
 	s.echo.GET("/signup/:token", s.handleSignupForm)
 	s.echo.POST("/signup/:token", s.handleSignupSubmit)
+
+	admin := s.echo.Group("/admin", s.requireAdmin())
+	admin.GET("/invites", s.handleAdminInvitesList)
+	admin.POST("/invites", s.handleAdminInvitesCreate)
+	admin.POST("/invites/:token/resend", s.handleAdminInvitesResend)
+	admin.POST("/invites/:token/revoke", s.handleAdminInvitesRevoke)
 }
 
 // homeView is the data shape consumed by both home_public.html and
