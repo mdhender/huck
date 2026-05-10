@@ -14,6 +14,22 @@ the document to update first.
 
 ## In scope
 
+| Task | Status | Commit |
+|------|--------|--------|
+| T1   | TODO   |        |
+| T2   | TODO   |        |
+| T3   | TODO   |        |
+| T4   | TODO   |        |
+| T5   | TODO   |        |
+| T6   | TODO   |        |
+| T7   | TODO   |        |
+| T8   | TODO   |        |
+| T9   | TODO   |        |
+| T10  | TODO   |        |
+| T11  | TODO   |        |
+| T12  | TODO   |        |
+| T13  | TODO   |        |
+
 ### T1 — Collapse `internal/email` into `internal/mail`
 
 `internal/mail/mailgun.go` currently wraps `internal/email/mailgun.go`

@@ -1,5 +1,11 @@
 # Huck Front-End Vision & Design Philosophy
 
+Miko said:
+
+> I think Huck’s biggest design risk is accidentally becoming a generic modern SaaS application.
+>
+> If you avoid that, you may end up with something people genuinely love using for ten years.
+
 ## Purpose
 
 Huck is a platform for old-school play-by-mail and persistent strategy games that have been modernized to run behind a browser.
