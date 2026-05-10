@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -54,14 +53,15 @@ func (s *Server) handleAdminUsersList(c *echo.Context) error {
 	}
 	rows := make([]userRowView, 0, len(all))
 	for _, u := range all {
+		createdAt, createdAtISO := fmtUTC(u.CreatedAt)
 		rows = append(rows, userRowView{
 			ID:           u.ID,
 			Handle:       u.Handle,
 			Email:        u.Email,
 			IsAdmin:      u.IsAdmin,
 			IsSelf:       u.ID == claims.UserID(),
-			CreatedAt:    u.CreatedAt.Format("2006-01-02 15:04 UTC"),
-			CreatedAtISO: u.CreatedAt.Format(time.RFC3339Nano),
+			CreatedAt:    createdAt,
+			CreatedAtISO: createdAtISO,
 		})
 	}
 	return c.Render(http.StatusOK, "pages/admin_users.html", adminUsersView{
@@ -184,14 +184,16 @@ func (s *Server) renderAdminUserEditError(c *echo.Context, claims *auth.Claims, 
 // newAdminUserView decorates a User with the format/self-aware fields the
 // view + edit templates need.
 func newAdminUserView(claims *auth.Claims, u users.User) adminUserView {
+	createdAt, createdAtISO := fmtUTC(u.CreatedAt)
+	updatedAt, updatedAtISO := fmtUTC(u.UpdatedAt)
 	return adminUserView{
 		Handle:       claims.Handle,
 		User:         u,
 		IsSelf:       u.ID == claims.UserID(),
-		CreatedAt:    u.CreatedAt.Format("2006-01-02 15:04 UTC"),
-		CreatedAtISO: u.CreatedAt.Format(time.RFC3339Nano),
-		UpdatedAt:    u.UpdatedAt.Format("2006-01-02 15:04 UTC"),
-		UpdatedAtISO: u.UpdatedAt.Format(time.RFC3339Nano),
+		CreatedAt:    createdAt,
+		CreatedAtISO: createdAtISO,
+		UpdatedAt:    updatedAt,
+		UpdatedAtISO: updatedAtISO,
 	}
 }
 

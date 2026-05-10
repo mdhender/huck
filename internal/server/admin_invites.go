@@ -220,14 +220,16 @@ func rowViewAt(inv invites.Invite, now time.Time) inviteRowView {
 	case inv.Expired(now):
 		status = "expired"
 	}
+	createdAt, createdAtISO := fmtUTC(inv.CreatedAt)
+	expiresAt, expiresAtISO := fmtUTC(inv.ExpiresAt)
 	return inviteRowView{
 		Token:        inv.Token.String(),
 		Email:        inv.Email,
 		Status:       status,
-		CreatedAt:    inv.CreatedAt.Format("2006-01-02 15:04 UTC"),
-		CreatedAtISO: inv.CreatedAt.Format(time.RFC3339Nano),
-		ExpiresAt:    inv.ExpiresAt.Format("2006-01-02 15:04 UTC"),
-		ExpiresAtISO: inv.ExpiresAt.Format(time.RFC3339Nano),
+		CreatedAt:    createdAt,
+		CreatedAtISO: createdAtISO,
+		ExpiresAt:    expiresAt,
+		ExpiresAtISO: expiresAtISO,
 		CanResend:    canResend,
 	}
 }
