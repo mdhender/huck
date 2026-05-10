@@ -84,13 +84,27 @@ Hard rules and conventions live in [AGENTS.md](AGENTS.md). Read it
 before making non-trivial changes — particularly the "no CGO", "Echo v5
 not v4", and "registration is invite-only" rules.
 
+
+### Coding Agent Prompts
+
+The following prompt seems to work well with Amp, Claude, and Codex.
+
+```text
+Implement the next unchecked/TODO sprint task. Follow the Agent Execution Rules in the sprint document. When complete:
+1. update the sprint table
+2. run the required verification
+3. commit the task as one focused commit
+4. report the commit hash
+5. stop
+```
+
+
 ## Project layout
 
 ```
 cmd/huck/            # entry point + ff/v4 command tree
 internal/config/     # flag/env/file binding
 internal/db/         # zombiezen open / create / migrate
-internal/email/      # tiny stdlib-only Mailgun client
 internal/mail/       # Mailer interface + Mailgun adapter, fake for tests
 internal/auth/       # bcrypt, JWT, validators, login/logout handlers
 internal/users/      # user store

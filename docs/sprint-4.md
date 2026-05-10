@@ -20,6 +20,67 @@ are retrofitted onto the new shells; behaviour stays identical.
 
 ---
 
+## Agent Execution Rules
+
+Work exactly one task row at a time.
+
+Task selection:
+
+1. Select the first task with `Status = TODO`
+2. If the entry checklist or a dependency is not satisfied, mark the
+   task `BLOCKED`, explain why in `Notes`, and stop
+3. Do not start a later task unless instructed by a human
+
+Workflow for one task:
+
+1. Mark the selected task `IN_PROGRESS`
+2. Implement only that task and any directly required tests/docs
+3. Run the repo verification required by `AGENTS.md`:
+   `go build ./...`, `go test ./...`, and `go vet ./...`
+4. If narrower validation is intentionally used, record why in `Notes`
+5. Update the sprint row:
+   - `Status = DONE` if implementation and verification completed
+   - `Status = BLOCKED` if the task cannot proceed
+   - `Status = REVIEW` only when code is complete but human
+     confirmation is explicitly needed before marking the task done
+   - `Notes` should briefly name important implementation choices,
+     skipped checks, or blockers
+6. Commit all task changes, including the sprint table update, as one
+   focused atomic commit
+7. Report the commit hash in the final response
+8. Stop and wait for further instruction
+
+Allowed status values:
+
+- `TODO` — not started
+- `IN_PROGRESS` — actively being implemented
+- `BLOCKED` — cannot proceed without intervention
+- `REVIEW` — complete enough for human verification, not marked done
+- `DONE` — implemented, verified, and committed
+
+Sprint task table format:
+
+| Task | Status | Commit | Notes |
+|------|--------|--------|-------|
+
+The `Commit` column records the landed task commit hash for traceability,
+matching the hash convention used in earlier sprint docs. A task commit
+cannot contain its own hash, so agents should report the hash after
+committing. Fill the column only if explicitly asked to make a separate
+bookkeeping update, or if a human updates it afterward.
+
+Rules:
+
+- Never work on multiple task rows simultaneously
+- Never modify unrelated files
+- Never skip updating the sprint table
+- Never continue automatically after completing a task
+- Prefer small, isolated, reversible commits
+- Record blockers explicitly in `Notes`
+- Preserve the sprint plan as the source of truth for progress
+
+---
+
 ## Entry checklist
 
 Before starting T1.1, confirm the Sprint 3 front-end readiness work is
@@ -45,23 +106,23 @@ complete:
 
 ## In scope
 
-| Task | Status | Commit |
-|------|--------|--------|
-| T1.1 | TODO   |        |
-| T1.2 | TODO   |        |
-| T1.3 | TODO   |        |
-| T1.4 | TODO   |        |
-| T2.1 | TODO   |        |
-| T2.2 | TODO   |        |
-| T3   | TODO   |        |
-| T4.1 | TODO   |        |
-| T4.2 | TODO   |        |
-| T4.3 | TODO   |        |
-| T4.4 | TODO   |        |
-| T4.5 | TODO   |        |
-| T5   | TODO   |        |
-| T6   | TODO   |        |
-| T7   | TODO   |        |
+| Task | Status | Commit | Notes |
+|------|--------|--------|-------|
+| T1.1 | TODO   |        |       |
+| T1.2 | TODO   |        |       |
+| T1.3 | TODO   |        |       |
+| T1.4 | TODO   |        |       |
+| T2.1 | TODO   |        |       |
+| T2.2 | TODO   |        |       |
+| T3   | TODO   |        |       |
+| T4.1 | TODO   |        |       |
+| T4.2 | TODO   |        |       |
+| T4.3 | TODO   |        |       |
+| T4.4 | TODO   |        |       |
+| T4.5 | TODO   |        |       |
+| T5   | TODO   |        |       |
+| T6   | TODO   |        |       |
+| T7   | TODO   |        |       |
 
 ### T1.1 — Add app-shell view contracts
 
