@@ -133,10 +133,17 @@ func (s *Server) installRoutes() {
 	admin.POST("/users/:id/delete", s.handleAdminUsersDelete)
 }
 
-// homeView is the data shape consumed by both home_public.html and
-// home_authed.html.
-type homeView struct {
-	Authed bool
+// homePublicView is the data shape consumed by pages/home_public.html.
+// Kept as an explicit (currently empty) type so the auth-shell home page
+// has its own contract — Sprint 4 will hang shell data off this struct
+// rather than re-merging with the app-shell view.
+type homePublicView struct{}
+
+// homeAuthedView is the data shape consumed by pages/home_authed.html.
+// Distinct from homePublicView because the authed home page moves to the
+// app shell in Sprint 4 and will grow shell/breadcrumb context that the
+// public page must not carry.
+type homeAuthedView struct {
 	Handle string
 	Admin  bool
 }
@@ -160,15 +167,13 @@ func (s *Server) handleAdminIndex(c *echo.Context) error {
 // home_authed.html for authenticated ones. Best-effort auth: an
 // invalid/missing/expired cookie just means anonymous, never 401.
 func (s *Server) handleHome(c *echo.Context) error {
-	var view homeView
-
 	if claims, ok := s.bestEffortClaims(c); ok {
-		view.Authed = true
-		view.Handle = claims.Handle
-		view.Admin = claims.Admin
-		return c.Render(http.StatusOK, "pages/home_authed.html", view)
+		return c.Render(http.StatusOK, "pages/home_authed.html", homeAuthedView{
+			Handle: claims.Handle,
+			Admin:  claims.Admin,
+		})
 	}
-	return c.Render(http.StatusOK, "pages/home_public.html", view)
+	return c.Render(http.StatusOK, "pages/home_public.html", homePublicView{})
 }
 
 // bestEffortClaims attempts to parse and validate the auth cookie. A
