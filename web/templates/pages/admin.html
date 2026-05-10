@@ -1,0 +1,33 @@
+{{ define "title" }}huck — admin{{ end }}
+
+{{ define "content" }}
+<header>
+    <nav>
+        <ul>
+            <li><strong>huck</strong></li>
+            <li>admin</li>
+        </ul>
+        <ul>
+            <li>signed in as <em>{{ .Handle }}</em></li>
+            <li><a href="/admin/invites">Invites</a></li>
+            <li><a href="/admin/users">Users</a></li>
+            <li><a href="/">Home</a></li>
+            <li>
+                <form class="inline" method="post" action="/logout">
+                    <button type="submit" class="secondary">Sign out</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+    <h1>Admin</h1>
+</header>
+
+<article>
+    <p>Admin dashboard. Sprint 4 will fill this in with summary widgets; for
+       now it is the canonical landing page for the admin section.</p>
+    <ul>
+        <li><a href="/admin/invites">Invites</a> — send and manage invitations.</li>
+        <li><a href="/admin/users">Users</a> — view and edit user accounts.</li>
+    </ul>
+</article>
+{{ end }}

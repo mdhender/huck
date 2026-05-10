@@ -462,11 +462,18 @@ secrets in logs and URLs).
 | POST     | `/logout`                             | auth   | Clears cookie.                               |
 | GET      | `/signup/:token`                      | public | Invite landing.                              |
 | POST     | `/signup/:token`                      | public | Creates user, consumes invite.               |
+| GET      | `/account`                            | auth   | Signed-in user's account detail page.        |
+| GET      | `/admin`                              | admin  | Admin dashboard (canonical path).            |
+| GET      | `/admin/`                             | public | 301 redirect to `/admin` (canonicalisation runs before the admin guard). |
 | GET      | `/admin/invites`                      | admin  | List + create form.                          |
 | POST     | `/admin/invites`                      | admin  | Create + send.                               |
 | POST     | `/admin/invites/:token/resend`        | admin  | Refresh expiry, re-send.                     |
 | POST     | `/admin/invites/:token/revoke`        | admin  | Delete invite.                               |
 | GET      | `/admin/users`                        | admin  | List users.                                  |
+| GET      | `/admin/users/:id`                    | admin  | User detail page.                            |
+| GET      | `/admin/users/:id/edit`               | admin  | User edit form.                              |
+| POST     | `/admin/users/:id/edit`               | admin  | Apply is_admin toggle and/or password reset. |
+| POST     | `/admin/users/:id/delete`             | admin  | Hard-delete user.                            |
 | GET      | `/static/*`                           | public | Embedded assets.                             |
 
 ### 10.1 Root route behaviour

@@ -8,6 +8,7 @@
         </ul>
         <ul>
             <li>signed in as <em>{{ .Handle }}</em></li>
+            <li><a href="/account">Account</a></li>
             {{ if .Admin }}<li><a href="/admin">Admin</a></li>{{ end }}
             <li>
                 <form class="inline" method="post" action="/logout">

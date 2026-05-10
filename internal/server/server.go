@@ -110,6 +110,15 @@ func (s *Server) installRoutes() {
 	s.echo.POST("/logout", s.handleLogout)
 	s.echo.GET("/signup/:token", s.handleSignupForm)
 	s.echo.POST("/signup/:token", s.handleSignupSubmit)
+	s.echo.GET("/account", s.handleAccount, s.requireAuth())
+
+	// /admin is the canonical dashboard path; /admin/ redirects to it.
+	// Registered outside the admin group so the redirect runs before
+	// requireAdmin, which keeps anonymous and non-admin users on the
+	// same canonical URL before the auth check fires on /admin itself.
+	s.echo.GET("/admin/", func(c *echo.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, "/admin")
+	})
 
 	admin := s.echo.Group("/admin", s.requireAdmin())
 	admin.GET("", s.handleAdminIndex)
@@ -132,11 +141,19 @@ type homeView struct {
 	Admin  bool
 }
 
-// handleAdminIndex is the GET /admin landing. The home page's "Admin"
-// link points here; rather than a dedicated index page, redirect to
-// the invite list (the operator's most common entry point).
+// adminIndexView is the data shape consumed by pages/admin.html.
+type adminIndexView struct {
+	Handle string
+}
+
+// handleAdminIndex is the GET /admin landing — the canonical admin
+// dashboard page. Sprint 3 lands a minimal placeholder here so Sprint 4
+// can wire stable sidebar links without dead-link exceptions.
 func (s *Server) handleAdminIndex(c *echo.Context) error {
-	return c.Redirect(http.StatusSeeOther, "/admin/invites")
+	claims := currentClaims(c)
+	return c.Render(http.StatusOK, "pages/admin.html", adminIndexView{
+		Handle: claims.Handle,
+	})
 }
 
 // handleHome renders home_public.html for anonymous visitors and
