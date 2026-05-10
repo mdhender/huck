@@ -86,7 +86,7 @@ Rules:
 | T4   | DONE   |        | Documented `runServe`'s migrate-but-never-create contract via doc comment in `cmd/huck/main.go`, expanded DESIGN.md §7.2/§7.3 with the same three-point contract, and added `TestMigrateAfterCreateIsNoOp` exercising the Create → Open → Migrate path the serve startup uses. AGENTS.md verification list was already correct. |
 | T5   | DONE   |        | Honoured the `ctx` on `invites.Store.Consume`: rewrote the doc comment to describe both halves of the contract (fail-fast `ctx.Err()` + the conn's interrupt channel that `sqlitex.Pool.Take` already wires), replaced `_ = ctx` with the entry-check, and added an explanatory comment after `s.pool.Take` in `handleSignupSubmit`. New `TestConsumeCancelled` locks in the fail-fast behaviour and verifies the UPDATE never ran. |
 | T6   | DONE   |        | Added `fmtUTC(t) (display, iso)` in `internal/server/format.go` (kept as a Go helper rather than a template FuncMap — the four call sites all assemble per-row view structs, so a function fits the existing pattern). Replaced the hand-formatted literals in `rowViewAt`, `handleAdminUsersList`, and `newAdminUserView`; dropped the now-unused `time` import from `admin_users.go`. New `TestFmtUTC` locks the display/ISO format strings. |
-| T7   | TODO   |        |       |
+| T7   | DONE   |        | Added `hxRedirect(c, path)` next to `isHXFragmentRequest` in `render.go`; replaced the four "if HX-Request → 204+HX-Redirect, else 303" call sites in `handleLoginSubmit`, `handleLogout`, `handleSignupSubmit`, and `requireAuth`. New `TestHXRedirect` in `redirect_test.go` covers both branches table-driven. |
 | T8   | TODO   |        |       |
 | T9   | TODO   |        |       |
 | T10  | TODO   |        |       |

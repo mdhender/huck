@@ -25,11 +25,7 @@ func (s *Server) requireAuth() echo.MiddlewareFunc {
 		return func(c *echo.Context) error {
 			claims, ok := s.bestEffortClaims(c)
 			if !ok {
-				if c.Request().Header.Get("HX-Request") == "true" {
-					c.Response().Header().Set("HX-Redirect", "/login")
-					return c.NoContent(http.StatusNoContent)
-				}
-				return c.Redirect(http.StatusSeeOther, "/login")
+				return hxRedirect(c, "/login")
 			}
 			c.Set(claimsContextKey, claims)
 			return next(c)

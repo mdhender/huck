@@ -205,11 +205,7 @@ func (s *Server) handleLoginSubmit(c *echo.Context) error {
 	}
 	s.setAuthCookie(c, token)
 
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/")
+	return hxRedirect(c, "/")
 }
 
 func (s *Server) renderLoginFailure(c *echo.Context, handle string) error {
@@ -221,11 +217,7 @@ func (s *Server) renderLoginFailure(c *echo.Context, handle string) error {
 
 func (s *Server) handleLogout(c *echo.Context) error {
 	s.clearAuthCookie(c)
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/")
+	return hxRedirect(c, "/")
 }
 
 // setAuthCookie applies the attributes from docs/DESIGN.md §8.1.
@@ -358,11 +350,7 @@ func (s *Server) handleSignupSubmit(c *echo.Context) error {
 	}
 	s.setAuthCookie(c, jwtToken)
 
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		return c.NoContent(http.StatusNoContent)
-	}
-	return c.Redirect(http.StatusSeeOther, "/")
+	return hxRedirect(c, "/")
 }
 
 // errEmailMismatch is returned when the form-submitted email differs

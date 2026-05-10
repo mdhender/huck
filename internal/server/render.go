@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
+	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v5"
@@ -127,6 +128,19 @@ func (r *Renderer) Render(c *echo.Context, w io.Writer, name string, data any) e
 	default:
 		return fmt.Errorf("server: template name must start with pages/ or partials/, got %q", name)
 	}
+}
+
+// hxRedirect issues a redirect that works for both HTMX and non-HTMX
+// requests. HTMX would swallow a 303 inside its swap pipeline, so for
+// HX-Request it sets the HX-Redirect header on a 204 No Content; other
+// requests get a plain 303 See Other. Centralised here so handlers do
+// not branch on HX-Request, matching the renderer's contract.
+func hxRedirect(c *echo.Context, path string) error {
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Redirect", path)
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.Redirect(http.StatusSeeOther, path)
 }
 
 // isHXFragmentRequest reports whether the request is a "real" HTMX swap
