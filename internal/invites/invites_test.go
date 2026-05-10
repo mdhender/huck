@@ -363,3 +363,41 @@ func TestConsumeNotFound(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+// TestConsumeCancelled asserts that Consume short-circuits on a
+// cancelled ctx instead of issuing the UPDATE. It locks in the fail-fast
+// half of the ctx contract documented on Consume; the other half
+// (SQLITE_INTERRUPT via pool.Take's SetInterrupt wiring) is a property
+// of the zombiezen driver and is exercised by its own tests.
+func TestConsumeCancelled(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	inv, err := f.store.Create(context.Background(), "cn@example.com", f.admin.ID)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	conn, err := f.pool.Take(context.Background())
+	if err != nil {
+		t.Fatalf("pool.Take: %v", err)
+	}
+	defer f.pool.Put(conn)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := f.store.Consume(ctx, conn, inv.Token); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+
+	// The invite must still be active — Consume must not have run the
+	// UPDATE when ctx was already cancelled.
+	got, err := f.store.GetByToken(context.Background(), inv.Token)
+	if err != nil {
+		t.Fatalf("GetByToken: %v", err)
+	}
+	if got.Consumed() {
+		t.Fatal("invite was consumed despite cancelled ctx")
+	}
+}

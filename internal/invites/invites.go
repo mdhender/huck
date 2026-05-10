@@ -218,11 +218,24 @@ func (s *Store) Revoke(ctx context.Context, t Token) error {
 
 // Consume marks an invite as used. It runs against the caller-supplied
 // connection so the signup handler can include it in the same
-// transaction as the user-insert (DESIGN.md §9 step 5). Returns
-// ErrNotFound, ErrExpired, or ErrConsumed if the invite is in any state
-// other than active.
+// transaction as the user-insert (DESIGN.md §9 step 5).
+//
+// ctx is honoured two ways:
+//  1. A fail-fast ctx.Err() check at entry, so an already-cancelled
+//     request never starts a write.
+//  2. The connection's interrupt channel, which sqlitex.Pool.Take wires
+//     to the take-time ctx.Done() — every sqlitex.Execute below
+//     therefore respects request cancellation. Consume does not call
+//     conn.SetInterrupt itself; callers that obtain conn via
+//     pool.Take(reqCtx) and pass the same reqCtx here get cancellation
+//     for free.
+//
+// Returns ErrNotFound, ErrExpired, or ErrConsumed if the invite is in
+// any state other than active.
 func (s *Store) Consume(ctx context.Context, conn *sqlite.Conn, t Token) error {
-	_ = ctx // present for API symmetry; sqlitex.Execute ignores ctx
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	inv, err := getByToken(conn, t)
 	if err != nil {
 		return err

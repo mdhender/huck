@@ -299,6 +299,9 @@ func (s *Server) handleSignupSubmit(c *echo.Context) error {
 		return err
 	}
 	defer s.pool.Put(conn)
+	// pool.Take wires conn.SetInterrupt(ctx.Done()) for us, so every
+	// sqlitex.Execute inside the transaction below — including the one
+	// in invites.Consume — honours request cancellation.
 
 	var newUser users.User
 
