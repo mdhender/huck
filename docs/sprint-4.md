@@ -1,6 +1,6 @@
 # Sprint 4 — Implementation Plan
 
-Status: **Draft 2026-05-10.**
+Status: **Ready 2026-05-10.**
 
 Sprint 4 builds the Layer-2 (layout) front end described in
 [`docs/front-end-plan.md`](front-end-plan.md): a persistent app
