@@ -1,11 +1,9 @@
-package auth_test
+package auth
 
 import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/mdhender/huck/internal/auth"
 )
 
 func TestValidatePassword(t *testing.T) {
@@ -17,11 +15,11 @@ func TestValidatePassword(t *testing.T) {
 		want error // nil = valid
 	}{
 		// Boundaries.
-		{"min length, ok", strings.Repeat("a", auth.MinPasswordLen), nil},
-		{"one below min", strings.Repeat("a", auth.MinPasswordLen-1), auth.ErrPasswordTooShort},
-		{"max length, ok", strings.Repeat("a", auth.MaxPasswordLen), nil},
-		{"one above max", strings.Repeat("a", auth.MaxPasswordLen+1), auth.ErrPasswordTooLong},
-		{"empty", "", auth.ErrPasswordTooShort},
+		{"min length, ok", strings.Repeat("a", MinPasswordLen), nil},
+		{"one below min", strings.Repeat("a", MinPasswordLen-1), ErrPasswordTooShort},
+		{"max length, ok", strings.Repeat("a", MaxPasswordLen), nil},
+		{"one above max", strings.Repeat("a", MaxPasswordLen+1), ErrPasswordTooLong},
+		{"empty", "", ErrPasswordTooShort},
 
 		// Allowed contents.
 		{"spaces allowed", "correct horse battery staple", nil},
@@ -30,15 +28,15 @@ func TestValidatePassword(t *testing.T) {
 		{"emoji allowed", "🐎🐎🐎🐎🐎🐎🐎🐎🐎🐎🐎🐎", nil},                       // 12 runes
 
 		// Rejected contents.
-		{"contains tab", "abcdefghijk\tx", auth.ErrPasswordNotPrintable},
-		{"contains newline", "abcdefghijkl\n", auth.ErrPasswordNotPrintable},
-		{"contains NUL", "abcdefghijkl\x00", auth.ErrPasswordNotPrintable},
-		{"contains DEL", "abcdefghijkl\x7f", auth.ErrPasswordNotPrintable},
+		{"contains tab", "abcdefghijk\tx", ErrPasswordNotPrintable},
+		{"contains newline", "abcdefghijkl\n", ErrPasswordNotPrintable},
+		{"contains NUL", "abcdefghijkl\x00", ErrPasswordNotPrintable},
+		{"contains DEL", "abcdefghijkl\x7f", ErrPasswordNotPrintable},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := auth.ValidatePassword(tc.pw)
+			err := ValidatePassword(tc.pw)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("ValidatePassword(%q): got %v, want %v", tc.pw, err, tc.want)
 			}
@@ -56,10 +54,10 @@ func TestValidateHandle(t *testing.T) {
 	}{
 		// Boundaries.
 		{"min length", "abc", nil},
-		{"one below min", "ab", auth.ErrHandleTooShort},
-		{"max length", "a" + strings.Repeat("b", auth.MaxHandleLen-1), nil},
-		{"one above max", "a" + strings.Repeat("b", auth.MaxHandleLen), auth.ErrHandleTooLong},
-		{"empty", "", auth.ErrHandleTooShort},
+		{"one below min", "ab", ErrHandleTooShort},
+		{"max length", "a" + strings.Repeat("b", maxHandleLen-1), nil},
+		{"one above max", "a" + strings.Repeat("b", maxHandleLen), ErrHandleTooLong},
+		{"empty", "", ErrHandleTooShort},
 
 		// Normalisation: leading/trailing whitespace and uppercase folded
 		// before validation.
@@ -76,22 +74,22 @@ func TestValidateHandle(t *testing.T) {
 		{"hyphen ok", "a-b-c", nil},
 
 		// First-character rule.
-		{"digit first", "1alice", auth.ErrHandleBadFirstChar},
-		{"underscore first", "_alice", auth.ErrHandleBadFirstChar},
-		{"hyphen first", "-alice", auth.ErrHandleBadFirstChar},
-		{"unicode first", "élise", auth.ErrHandleBadFirstChar},
+		{"digit first", "1alice", ErrHandleBadFirstChar},
+		{"underscore first", "_alice", ErrHandleBadFirstChar},
+		{"hyphen first", "-alice", ErrHandleBadFirstChar},
+		{"unicode first", "élise", ErrHandleBadFirstChar},
 
 		// Disallowed characters elsewhere.
-		{"space inside", "a lice", auth.ErrHandleBadChar},
-		{"slash inside", "a/lice", auth.ErrHandleBadChar},
-		{"@ inside", "a@lice", auth.ErrHandleBadChar},
-		{"unicode inside", "alicé", auth.ErrHandleBadChar},
-		{"emoji inside", "alice🎉", auth.ErrHandleBadChar},
+		{"space inside", "a lice", ErrHandleBadChar},
+		{"slash inside", "a/lice", ErrHandleBadChar},
+		{"@ inside", "a@lice", ErrHandleBadChar},
+		{"unicode inside", "alicé", ErrHandleBadChar},
+		{"emoji inside", "alice🎉", ErrHandleBadChar},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := auth.ValidateHandle(tc.in)
+			err := ValidateHandle(tc.in)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("ValidateHandle(%q): got %v, want %v", tc.in, err, tc.want)
 			}

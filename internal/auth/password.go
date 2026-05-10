@@ -14,8 +14,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// BcryptCost matches docs/DESIGN.md and AGENTS.md.
-const BcryptCost = 12
+// bcryptCost matches docs/DESIGN.md and AGENTS.md.
+const bcryptCost = 12
 
 // ErrBadPassword is returned by Verify when the supplied password does not
 // match the stored hash.
@@ -26,7 +26,7 @@ func Hash(password string) (string, error) {
 	if len(password) == 0 {
 		return "", errors.New("auth: empty password")
 	}
-	out, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+	out, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return "", fmt.Errorf("auth: hash: %w", err)
 	}

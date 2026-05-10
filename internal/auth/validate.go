@@ -29,11 +29,11 @@ const (
 	MaxPasswordLen = 128
 )
 
-// MinHandleLen and MaxHandleLen are the inclusive bounds enforced by
+// minHandleLen and maxHandleLen are the inclusive bounds enforced by
 // [ValidateHandle]. Counted after lowercasing and trimming.
 const (
-	MinHandleLen = 3
-	MaxHandleLen = 32
+	minHandleLen = 3
+	maxHandleLen = 32
 )
 
 // ValidatePassword enforces the policy from DESIGN.md §8.7:
@@ -68,10 +68,10 @@ func ValidateHandle(h string) error {
 	h = strings.ToLower(strings.TrimSpace(h))
 	runes := []rune(h)
 	n := len(runes)
-	if n < MinHandleLen {
+	if n < minHandleLen {
 		return ErrHandleTooShort
 	}
-	if n > MaxHandleLen {
+	if n > maxHandleLen {
 		return ErrHandleTooLong
 	}
 	if !isHandleStart(runes[0]) {
