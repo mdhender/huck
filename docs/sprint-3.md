@@ -29,6 +29,7 @@ the document to update first.
 | T11  | TODO   |        |
 | T12  | TODO   |        |
 | T13  | TODO   |        |
+| T14  | TODO   |        |
 
 ### T1 — Collapse `internal/email` into `internal/mail`
 
@@ -199,14 +200,14 @@ via `conn.SetInterrupt`. Either:
 Pick the first; it's the same fix the rest of the stores can adopt
 later. Update doc comments accordingly. No new public API.
 
-### T6 — Single shared time-format helper / template funcmap
+### T6 — Single shared time-format helper / template FuncMap
 
 The `"2006-01-02 15:04 UTC"` literal plus its `time.RFC3339Nano` ISO
 sibling are duplicated across `admin_invites.go` (`rowViewAt`),
 `admin_users.go` (list rows + `newAdminUserView`).
 
 - Add a small `fmtUTC(t time.Time) (display, iso string)` helper in
-  `internal/server` (or expose it to templates as a `funcmap` entry
+  `internal/server` (or expose it to templates as a `FuncMap` entry
   named e.g. `utc`).
 - Replace the four hand-formatted call sites.
 - One test asserting the format strings, so a future change is
@@ -286,7 +287,7 @@ consumed only within `internal/auth` (and tests). Anything we don't
 share across packages should be lowercase to keep the public API
 honest.
 
-- Walk the package, lower-case unused exports, and verify nothing
+- Walk the package, lowercase unused exports, and verify nothing
   outside the package referenced them.
 
 ### T13 — Polish notes (small, batch into one PR)
@@ -303,6 +304,31 @@ the same burndown:
   fields) at which we'd split into per-subcommand sub-structs.
 - Sweep for lingering "Sprint 1 unused" / "Sprint 2 unused" comments
   that are now obsolete after Sprint 3 lands.
+
+### T14 — Front-end contract readiness for Sprint 4
+
+Sprint 4 should begin with the front-end contracts settled, not with
+implementation-time ambiguity. This is a doc-only readiness task: do
+not build the new shells, templates, partials, or CSS primitives here.
+
+- Reconcile the app-shell data contract between `docs/front-end-plan.md`
+  and `docs/sprint-4.md`. The plan currently says every app-shell page
+  view embeds `Crumbs []Crumb`; the Sprint 4 task list later leans
+  toward a typed shell view composed once by the renderer. Pick the
+  contract before implementation, document it in the plan, and make the
+  Sprint 4 tasks match.
+- Reconcile the **Account** sidebar rule. Miko's "no mystery" principle
+  forbids dead links; if there is no `/account` page yet, Sprint 4
+  should either omit the link or explicitly include a real Account stub
+  page in scope. Pick one and make `docs/front-end-plan.md` and
+  `docs/sprint-4.md` agree.
+- Add a short "Sprint 4 entry checklist" to `docs/sprint-4.md` so the
+  layout sprint starts from a known baseline: CSRF fields removed,
+  `hxRedirect` exists, `/admin` redirect handled per T11, renderer tests
+  are green, and existing templates have been reviewed for duplicated
+  nav/header assumptions.
+- Fix small wording typos while touching the Sprint 4 docs, if any are
+  present in the checked-in text.
 
 ## Out of scope
 

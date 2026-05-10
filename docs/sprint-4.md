@@ -20,6 +20,22 @@ are retrofitted onto the new shells; behaviour stays identical.
 
 ---
 
+## Entry checklist
+
+Before starting T1, confirm the Sprint 3 front-end readiness work is
+complete:
+
+- CSRF tokens, hidden `_csrf` fields, and CSRF view fields are gone.
+- The shared `hxRedirect` helper exists and covers HTMX vs. non-HTMX
+  redirects.
+- The `/admin` index redirect has been dropped or deliberately handled
+  per Sprint 3 T11.
+- Renderer tests are green before changing the layout dispatch path.
+- Existing page templates have been reviewed for duplicated
+  nav/header assumptions that the new app shell will own.
+
+---
+
 ## In scope
 
 | Task | Status | Commit |
@@ -116,9 +132,8 @@ Per the plan (§2), the sidebar reflects facts that are true
 today. No game-scoped links yet (no game model).
 
 - Always-visible items: **Home** (`/`), **Account**
-  (`/account` — link present even if the page is a stub for
-  now; if no Account page exists yet, *omit the link*, do not
-  add a dead one).
+  (`/account`, but only if a real page or intentional stub exists;
+  otherwise omit the link rather than adding a dead one).
 - If `is_admin`: an **Admin** section with **Invites**
   (`/admin/invites`) and **Users** (`/admin/users`).
 - The sidebar lives in `web/templates/partials/sidebar.html`
