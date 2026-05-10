@@ -56,6 +56,30 @@ func (c *Config) ValidateServe() error {
 	if c.BaseURL == "" {
 		missing = append(missing, "--base-url")
 	}
+	missing = append(missing, c.missingMailerFlags()...)
+	if len(missing) > 0 {
+		return fmt.Errorf("serve: missing required flag(s): %v", missing)
+	}
+	if len(c.JWTSecret) < MinJWTSecretLen {
+		return fmt.Errorf("serve: --jwt-secret must be at least %d bytes (got %d)", MinJWTSecretLen, len(c.JWTSecret))
+	}
+	return nil
+}
+
+// ValidateMailer checks that the Mailgun trio required by
+// [mail.NewMailgunMailer] is set. It is shared between `huck serve` (via
+// [Config.ValidateServe]) and `cmd/sendtest` so that the failure
+// messages stay in sync. `--mailgun-api-base` remains optional.
+func (c *Config) ValidateMailer() error {
+	missing := c.missingMailerFlags()
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required flag(s): %v", missing)
+	}
+	return nil
+}
+
+func (c *Config) missingMailerFlags() []string {
+	var missing []string
 	if c.MailgunDomain == "" {
 		missing = append(missing, "--mailgun-domain")
 	}
@@ -65,13 +89,7 @@ func (c *Config) ValidateServe() error {
 	if c.MailgunFrom == "" {
 		missing = append(missing, "--mailgun-from")
 	}
-	if len(missing) > 0 {
-		return fmt.Errorf("serve: missing required flag(s): %v", missing)
-	}
-	if len(c.JWTSecret) < MinJWTSecretLen {
-		return fmt.Errorf("serve: --jwt-secret must be at least %d bytes (got %d)", MinJWTSecretLen, len(c.JWTSecret))
-	}
-	return nil
+	return missing
 }
 
 // ValidateDB is invoked by `huck db create` and `huck db migrate`.

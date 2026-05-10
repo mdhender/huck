@@ -80,7 +80,7 @@ Rules:
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
 | T1   | DONE   |        | Folded the stdlib Mailgun HTTP client into `internal/mail`; deleted `internal/email/`; updated AGENTS.md, README.md, and docs/mailgun-lite.md. |
-| T2   | TODO   |        |       |
+| T2   | DONE   |        | Repurposed `cmd/sendtest` as the documented Mailgun smoke-test: switched to `internal/config` + `ff.Parse` (`HUCK_MAILGUN_*` env vars unchanged), added a real `--to` flag, factored `Config.ValidateMailer`/`missingMailerFlags` shared with `ValidateServe`, and added `cmd/sendtest/README.md`. |
 | T3.1 | TODO   |        |       |
 | T3.2 | TODO   |        |       |
 | T4   | TODO   |        |       |
