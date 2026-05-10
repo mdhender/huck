@@ -18,7 +18,8 @@ the document to update first.
 |------|--------|--------|
 | T1   | TODO   |        |
 | T2   | TODO   |        |
-| T3   | TODO   |        |
+| T3.1 | TODO   |        |
+| T3.2 | TODO   |        |
 | T4   | TODO   |        |
 | T5   | TODO   |        |
 | T6   | TODO   |        |
@@ -31,6 +32,11 @@ the document to update first.
 | T13  | TODO   |        |
 | T14  | TODO   |        |
 | T15  | TODO   |        |
+
+Task order encodes the known dependencies: T2 follows the mail package
+collapse in T1, T3.2 follows the CrossOriginProtection install in
+T3.1, T14 waits for the CSRF, redirect, and `/admin` cleanup baseline,
+and T15 closes the Sprint 4 docs once that code baseline is settled.
 
 ### T1 — Collapse `internal/email` into `internal/mail`
 
@@ -80,26 +86,14 @@ ergonomics; we just need to stop pretending it's disposable.
   rewrite; the binary should remain installable via
   `go install ./cmd/sendtest`.
 
-### T3 — Replace Echo's CSRF middleware with `http.CrossOriginProtection`
+### T3.1 — Install `http.CrossOriginProtection`
 
 Go 1.25 added [`net/http.CrossOriginProtection`][] (see Go 1.25 release
 notes, `net/http`). It implements CSRF / cross-origin request
 protection using the browser's `Sec-Fetch-Site` and `Origin` headers
-instead of double-submit cookies, which removes the need for:
+instead of double-submit cookies.
 
 [`net/http.CrossOriginProtection`]: https://pkg.go.dev/net/http#CrossOriginProtection
-
-- the `middleware.CSRFWithConfig` block in
-  `internal/server/server.go`,
-- the `_csrf` cookie,
-- the `csrfToken(c)` helper and the `c.Get("csrf")` reflective lookup
-  it does (the silent `string`-cast fallback was the original code
-  smell that prompted this task),
-- and the `CSRF` field on every page view struct (`homeView`,
-  `loginView`, `signupView`, `adminInvitesView`, `adminUsersView`,
-  `adminUserView`, `inviteRowView`).
-
-Subtasks:
 
 - Bump `go.mod` (already on `go 1.26.2`, so the API is available; no
   toolchain change needed) and confirm `go build` succeeds against
@@ -110,16 +104,33 @@ Subtasks:
   an Echo middleware adapter — pick whichever sits more naturally with
   Echo v5's `StartConfig` flow. Document the choice next to the call.
 - Remove `middleware.CSRFWithConfig` and the `_csrf` cookie config.
-- Remove `csrfToken`, `currentClaims`-style `c.Get` lookups for CSRF,
-  and the `CSRF` template inputs. Update the templates to drop the
-  hidden `_csrf` form fields and the `htmx.config.headers` mirror, if
-  any.
+- Keep this task focused on server-side request protection. If removing
+  the old middleware leaves compile-time references to `csrfToken` or
+  `CSRF` view fields, make the smallest temporary compatibility change
+  needed and leave the full template/view cleanup to T3.2.
+- Add a single integration test that POSTs to `/login` with a
+  cross-site `Sec-Fetch-Site: cross-site` header and asserts a 403,
+  and one that POSTs the same request as `same-origin` and asserts
+  the existing happy path.
 - Verify `Sec-Fetch-Site` / `Origin` reach the server in our local
   dev setup: HTMX issues normal `fetch`-shaped requests, so the
   browser will set those headers automatically. The middleware
   defaults are fine for a same-origin app like Huck; we should not
   need `AddTrustedOrigin` until / unless we ever serve the frontend
   from a different host.
+
+### T3.2 — Remove double-submit CSRF token plumbing
+
+With T3.1 in place, delete the old token mechanism end-to-end:
+
+- Remove the `csrfToken(c)` helper and the `c.Get("csrf")` reflective
+  lookup it does (the silent `string`-cast fallback was the original
+  code smell that prompted this task).
+- Remove the `CSRF` field on every page view struct (`homeView`,
+  `loginView`, `signupView`, `adminInvitesView`, `adminUsersView`,
+  `adminUserView`, `inviteRowView`).
+- Update the templates to drop the hidden `_csrf` form fields and the
+  `htmx.config.headers` mirror, if any.
 - Document the trade-off in `docs/DESIGN.md` §12 (and the new §X for
   CSRF) so a future maintainer doesn't reintroduce a token mechanism:
   Huck deliberately relies on the stdlib's
@@ -155,10 +166,8 @@ Subtasks:
     sprint; if we cannot enforce TLS 1.3 at Nginx, drop a note in
     DESIGN.md acknowledging the wider residual risk and rely more
     heavily on `SameSite=Lax` + HSTS.
-- Add a single integration test that POSTs to `/login` with a
-  cross-site `Sec-Fetch-Site: cross-site` header and asserts a 403,
-  and one that POSTs the same request as `same-origin` and asserts
-  the existing happy path.
+- Update existing form/HTMX tests so they no longer fetch or submit
+  `_csrf` values. Keep the T3.1 cross-origin tests green.
 
 ### T4 — Document `runServe`'s migrate-but-never-create contract
 
@@ -296,8 +305,6 @@ honest.
 The following are too small for their own task headings but are part of
 the same burndown:
 
-- Drop `inviteRowView.CSRF` if T3 hasn't already removed every CSRF
-  template field — verify the partial doesn't reference it.
 - Confirm `templates/email/invite.html` uses `{{ .URL }}` only inside
   an `href` attribute (HTML-safe context), not inside JS or CSS.
 - Comment in `internal/config/config.go` that the `Config` struct is
@@ -306,11 +313,35 @@ the same burndown:
 - Sweep for lingering "Sprint 1 unused" / "Sprint 2 unused" comments
   that are now obsolete after Sprint 3 lands.
 
-### T14 — Front-end contract readiness for Sprint 4
+### T14 — Pre-Sprint-4 code alignment
+
+Remove the small code/doc mismatches that would otherwise turn into
+layout-sprint speed bumps. This should run after T3.2, T7, and T11 so
+the renderer and template baseline is already stable.
+
+- Fix the Sprint 4 user-detail route examples to match the actual route
+  contract: admin user pages are `/admin/users/:id` and
+  `/admin/users/:id/edit`, not `:handle`. Breadcrumb labels should still
+  display the user's handle; only the URL parameter is numeric.
+- Split `homeView` into separate `homePublicView` and `homeAuthedView`
+  structs. `home_public.html` moves to the auth shell in Sprint 4 and
+  should not carry app-shell fields; `home_authed.html` moves to the app
+  shell and needs the signed-in handle/admin state plus future breadcrumb
+  context. Keeping one shared struct makes the shell split harder to
+  reason about.
+- Add a small renderer smoke test before Sprint 4 changes layout
+  dispatch: rendering a page template should go through the current
+  layout, and rendering a partial template should render the partial
+  alone. Sprint 4 T2 can then update that baseline instead of adding
+  coverage from scratch while changing the renderer.
+
+### T15 — Front-end contract readiness for Sprint 4
 
 Sprint 4 should begin with the front-end contracts settled, not with
 implementation-time ambiguity. This is a doc-only readiness task: do
 not build the new shells, templates, partials, or CSS primitives here.
+Run this after T14 so the Sprint 4 entry checklist records the actual
+Sprint 3 baseline.
 
 - Reconcile the app-shell data contract between `docs/front-end-plan.md`
   and `docs/sprint-4.md`. The plan currently says every app-shell page
@@ -331,27 +362,6 @@ not build the new shells, templates, partials, or CSS primitives here.
 - Fix small wording typos while touching the Sprint 4 docs, if any are
   present in the checked-in text.
 
-### T15 — Pre-Sprint-4 alignment
-
-Remove the small code/doc mismatches that would otherwise turn into
-layout-sprint speed bumps.
-
-- Fix the Sprint 4 user-detail route examples to match the actual route
-  contract: admin user pages are `/admin/users/:id` and
-  `/admin/users/:id/edit`, not `:handle`. Breadcrumb labels should still
-  display the user's handle; only the URL parameter is numeric.
-- Split `homeView` into separate `homePublicView` and `homeAuthedView`
-  structs. `home_public.html` moves to the auth shell in Sprint 4 and
-  should not carry app-shell fields; `home_authed.html` moves to the app
-  shell and needs the signed-in handle/admin state plus future breadcrumb
-  context. Keeping one shared struct makes the shell split harder to
-  reason about.
-- Add a small renderer smoke test before Sprint 4 changes layout
-  dispatch: rendering a page template should go through the current
-  layout, and rendering a partial template should render the partial
-  alone. Sprint 4 T2 can then update that baseline instead of adding
-  coverage from scratch while changing the renderer.
-
 ## Out of scope
 
 - Any new feature work. Sprint 3 is tech-debt burndown only.
@@ -361,8 +371,8 @@ layout-sprint speed bumps.
 Per AGENTS.md "Verification before saying 'done'":
 
 - `go build ./...` succeeds.
-- `go test ./...` passes (including the new T3 cross-origin tests,
-  the new T4 idempotent-migrate test, and the new T15 renderer smoke
+- `go test ./...` passes (including the new T3.1 cross-origin tests,
+  the new T4 idempotent-migrate test, and the new T14 renderer smoke
   test).
 - `go vet ./...` is clean.
 - `huck db create --db /tmp/huck-sprint3.db` succeeds on a fresh
@@ -373,7 +383,7 @@ Per AGENTS.md "Verification before saying 'done'":
   and prints a success line.
 - Manual smoke-test of `huck serve`: log in, create an invite, sign
   up via the emailed link, and confirm no `_csrf` cookie or hidden
-  form field is present in the rendered HTML (T3).
+  form field is present in the rendered HTML (T3.2).
 
 ## Change log
 
