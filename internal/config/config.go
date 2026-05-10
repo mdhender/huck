@@ -11,6 +11,12 @@ import (
 // Config is the typed configuration for huck. Every flag in DESIGN.md §6 has
 // a field here. Per-subcommand validation lives next to each subcommand;
 // this struct intentionally does not validate itself.
+//
+// Config is intentionally one flat bag rather than per-subcommand sub-structs.
+// At ~25 fields it would be worth splitting into nested groups (e.g.
+// Config.Server, Config.Mail, Config.Admin) so each subcommand only sees its
+// slice of the surface; below that threshold the flatness is easier to read
+// and matches the DESIGN.md §6 flag table one-for-one.
 type Config struct {
 	// Globals (every subcommand sees these).
 	ConfigFile string // --config (optional path to a plain-format file)
@@ -21,7 +27,7 @@ type Config struct {
 
 	// HTTP server.
 	Addr         string // --addr
-	BaseURL      string // --base-url   (parsed but unused in Sprint 1)
+	BaseURL      string // --base-url   (used to build invite links; required by `huck serve` as of Sprint 2)
 	JWTSecret    string // --jwt-secret (HS256 key, ≥32 bytes)
 	CookieSecure bool   // --cookie-secure
 	CookieDomain string // --cookie-domain
