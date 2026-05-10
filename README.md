@@ -106,3 +106,4 @@ Project contributors include:
 
 * Michael D Henderson
 * OpenAI Codex
+* Anthropic Claude
