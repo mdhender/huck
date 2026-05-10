@@ -83,7 +83,7 @@ func (s *Store) CreateOnConn(conn *sqlite.Conn, in NewUser) (User, error) {
 			Args: []any{in.Handle, in.Email, in.PasswordHash, boolToInt(in.IsAdmin), now, now},
 		})
 	if err != nil {
-		return User{}, classifyInsertErr(err)
+		return User{}, classifyInsertErr(conn, in.Handle, in.Email, err)
 	}
 
 	return getOneOnConn(conn,
@@ -278,18 +278,43 @@ func boolToInt(b bool) int {
 }
 
 // classifyInsertErr maps SQLite UNIQUE failures to our sentinel errors.
-func classifyInsertErr(err error) error {
-	code := sqlite.ErrCode(err)
-	if code != sqlite.ResultConstraintUnique {
+//
+// On SQLITE_CONSTRAINT_UNIQUE we disambiguate ErrHandleTaken vs.
+// ErrEmailTaken by running a same-connection SELECT against the
+// normalised input rather than parsing the driver's error text. The
+// text form ("UNIQUE constraint failed: users.handle") is a SQLite
+// implementation detail, and the previous strings.Contains check was
+// silently coupled to both that wording and the column names. The
+// SELECT is cheap, runs on the caller's existing conn (so it's inside
+// the same transaction when the caller has one open), and survives
+// both wording drift and column renames — a rename would surface as a
+// loud "no such column" error from classify itself instead of a
+// silent fallthrough to the generic wrapper.
+func classifyInsertErr(conn *sqlite.Conn, handle, email string, err error) error {
+	if sqlite.ErrCode(err) != sqlite.ResultConstraintUnique {
 		return fmt.Errorf("users: insert: %w", err)
 	}
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "users.handle"):
+	if hit, qerr := rowExists(conn, `SELECT 1 FROM users WHERE handle = ?;`, handle); qerr != nil {
+		return fmt.Errorf("users: insert: classify: %w", qerr)
+	} else if hit {
 		return ErrHandleTaken
-	case strings.Contains(msg, "users.email"):
-		return ErrEmailTaken
-	default:
-		return fmt.Errorf("users: insert: %w", err)
 	}
+	if hit, qerr := rowExists(conn, `SELECT 1 FROM users WHERE email = ?;`, email); qerr != nil {
+		return fmt.Errorf("users: insert: classify: %w", qerr)
+	} else if hit {
+		return ErrEmailTaken
+	}
+	return fmt.Errorf("users: insert: %w", err)
+}
+
+func rowExists(conn *sqlite.Conn, query string, arg any) (bool, error) {
+	var found bool
+	err := sqlitex.Execute(conn, query, &sqlitex.ExecOptions{
+		Args: []any{arg},
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			found = true
+			return nil
+		},
+	})
+	return found, err
 }

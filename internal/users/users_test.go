@@ -57,6 +57,13 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
+// TestUniqueConstraints is the regression check for the T10
+// classifier: it must distinguish handle-vs-email conflicts without
+// depending on the SQLite driver's error wording. The third case
+// pins the both-columns-conflict ordering — when an insert would
+// violate both the handle and the email UNIQUE constraints, the
+// classifier reports the handle hit first, matching the order
+// handlers expect for "handle already in use" precedence.
 func TestUniqueConstraints(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)
@@ -74,6 +81,11 @@ func TestUniqueConstraints(t *testing.T) {
 	_, err = s.Create(ctx, users.NewUser{Handle: "bob", Email: "A@example.com", PasswordHash: "h"})
 	if !errors.Is(err, users.ErrEmailTaken) {
 		t.Fatalf("want ErrEmailTaken, got %v", err)
+	}
+
+	_, err = s.Create(ctx, users.NewUser{Handle: "alice", Email: "a@example.com", PasswordHash: "h"})
+	if !errors.Is(err, users.ErrHandleTaken) {
+		t.Fatalf("both-columns conflict: want ErrHandleTaken (handle checked first), got %v", err)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"zombiezen.com/go/sqlite"
@@ -105,7 +104,7 @@ func (s *Store) CreateOnConn(conn *sqlite.Conn, email string, invitedBy int64) (
 			},
 		})
 	if err != nil {
-		return Invite{}, classifyInsertErr(err)
+		return Invite{}, classifyInsertErr(conn, email, err)
 	}
 
 	return Invite{
@@ -309,16 +308,41 @@ func parseTime(s string) time.Time {
 }
 
 // classifyInsertErr maps the SQLite UNIQUE failure on the
-// invites_email_active partial index to ErrEmailAlreadyInvited. Any
-// other constraint or driver error is wrapped and returned as-is.
-func classifyInsertErr(err error) error {
+// invites_email_active partial index to ErrEmailAlreadyInvited.
+//
+// On SQLITE_CONSTRAINT_UNIQUE we confirm the conflict by querying for
+// an active (unconsumed) invite at the same email on the caller's
+// connection, rather than parsing the driver's error text. The
+// previous strings.Contains check was silently coupled to SQLite's
+// "UNIQUE constraint failed: invites.email" wording and to the column
+// name; the SELECT is cheap, survives both wording drift and a column
+// rename, and runs inside whatever transaction the caller has open on
+// conn. Any other constraint or driver error is wrapped and returned
+// as-is.
+func classifyInsertErr(conn *sqlite.Conn, email string, err error) error {
 	if sqlite.ErrCode(err) != sqlite.ResultConstraintUnique {
 		return fmt.Errorf("invites: insert: %w", err)
 	}
-	// SQLite reports partial-index UNIQUE violations as
-	// "UNIQUE constraint failed: invites.email".
-	if strings.Contains(err.Error(), "invites.email") {
+	hit, qerr := activeInviteExists(conn, email)
+	if qerr != nil {
+		return fmt.Errorf("invites: insert: classify: %w", qerr)
+	}
+	if hit {
 		return ErrEmailAlreadyInvited
 	}
 	return fmt.Errorf("invites: insert: %w", err)
+}
+
+func activeInviteExists(conn *sqlite.Conn, email string) (bool, error) {
+	var found bool
+	err := sqlitex.Execute(conn,
+		`SELECT 1 FROM invites WHERE email = ? AND consumed_at IS NULL;`,
+		&sqlitex.ExecOptions{
+			Args: []any{email},
+			ResultFunc: func(stmt *sqlite.Stmt) error {
+				found = true
+				return nil
+			},
+		})
+	return found, err
 }
