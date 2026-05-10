@@ -5,12 +5,14 @@ people. It serves server-rendered HTML augmented with HTMX and AlpineJS,
 and uses SQLite for persistence. Authentication is invite-only and uses
 JWT in an HttpOnly cookie.
 
-The full design lives in [docs/DESIGN.md](docs/DESIGN.md). The Sprint 1
-implementation plan lives in [docs/sprint-1.md](docs/sprint-1.md).
+The full design lives in [docs/DESIGN.md](docs/DESIGN.md). Sprint plans
+live in [docs/sprint-1.md](docs/sprint-1.md) and
+[docs/sprint-2.md](docs/sprint-2.md).
 
 Email delivery uses Mailgun through a small internal stdlib-only client
-in `internal/email`. See [docs/mailgun-lite.md](docs/mailgun-lite.md)
-for the rationale and verification notes.
+in `internal/email`, fronted by the `mail.Mailer` interface in
+`internal/mail`. See [docs/mailgun-lite.md](docs/mailgun-lite.md) for
+the rationale and verification notes.
 
 ## Quickstart
 
@@ -26,22 +28,41 @@ CGO_ENABLED=0 go build -o huck ./cmd/huck
 
 # 3. Create the bootstrap admin user. Password is read from
 #    HUCK_ADMIN_PASSWORD if set, otherwise prompted on the TTY.
-HUCK_ADMIN_PASSWORD=changeme123 \
+#    Passwords must be 12–128 characters of printable Unicode.
+HUCK_ADMIN_PASSWORD='change-me-please' \
   ./huck admin create --db ./huck.db --handle alice --email alice@example.com
 
-# 4. Start the server. The JWT secret must be at least 32 bytes.
+# 4. Start the server. As of Sprint 2, the Mailgun trio and --base-url
+#    are required (invites are emailed synchronously). The JWT secret
+#    must be at least 32 bytes. Set --mailgun-api-base only for EU
+#    Mailgun customers (e.g. https://api.eu.mailgun.net).
 HUCK_JWT_SECRET="$(openssl rand -base64 48)" \
 HUCK_COOKIE_SECURE=false \
-  ./huck serve --db ./huck.db --addr :8080
+  ./huck serve \
+    --db ./huck.db \
+    --addr :8080 \
+    --base-url http://localhost:8080 \
+    --mailgun-domain mg.example.com \
+    --mailgun-api-key "$HUCK_MAILGUN_API_KEY" \
+    --mailgun-from 'Huck <noreply@mg.example.com>'
 ```
 
-Open <http://localhost:8080>, click **Sign in**, log in as `alice`, and
-you should land on the authenticated welcome page. Sign out from the nav
-bar and you should land back on the public landing page.
+Open <http://localhost:8080>, click **Sign in**, and log in as `alice`.
+From the admin nav, visit `/admin/invites` to issue an invite — the
+recipient gets an email containing
+`http://localhost:8080/signup/<token>?email=<urlencoded>`. They follow
+the link, pick a handle and password (subject to the §8.7/§8.8
+policies), and land logged in. Admins can also resend or revoke
+pending invites, and edit or delete users from `/admin/users`.
 
 > `HUCK_COOKIE_SECURE=false` is only appropriate for local development
 > over plain HTTP. In production, leave it at the default (`true`) and
 > serve huck behind TLS.
+
+For local development, secrets like `HUCK_MAILGUN_API_KEY` are
+typically set in `.env.development.local` (gitignored) and picked up
+automatically by `internal/dotenv` when `HUCK_ENV` is unset or
+`development`.
 
 ## Configuration
 
@@ -69,9 +90,11 @@ cmd/huck/            # entry point + ff/v4 command tree
 internal/config/     # flag/env/file binding
 internal/db/         # zombiezen open / create / migrate
 internal/email/      # tiny stdlib-only Mailgun client
-internal/auth/       # bcrypt, JWT, login/logout handlers
+internal/mail/       # Mailer interface + Mailgun adapter, fake for tests
+internal/auth/       # bcrypt, JWT, validators, login/logout handlers
 internal/users/      # user store
-internal/server/     # Echo wiring, renderer, middleware
+internal/invites/    # invite tokens, signup transaction
+internal/server/     # Echo wiring, renderer, middleware, admin pages
 migrations/          # NNNN_*.sql, embedded
 web/                 # templates + static assets, embedded
 docs/                # design + sprint plans
