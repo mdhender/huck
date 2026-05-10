@@ -22,7 +22,7 @@ are retrofitted onto the new shells; behaviour stays identical.
 
 ## Entry checklist
 
-Before starting T1, confirm the Sprint 3 front-end readiness work is
+Before starting T1.1, confirm the Sprint 3 front-end readiness work is
 complete:
 
 - CSRF tokens, hidden `_csrf` fields, and CSRF view fields are gone.
@@ -33,7 +33,7 @@ complete:
 - `homeView` has been split into auth-shell and app-shell view structs
   per Sprint 3 T15.
 - A baseline renderer smoke test exists for the current page-vs-partial
-  dispatch before T2 changes the layout selection logic.
+  dispatch before T2.2 changes the layout selection logic.
 - Admin user detail routes are confirmed as `/admin/users/:id` and
   `/admin/users/:id/edit`; breadcrumb labels may use handles, but the
   URL parameter remains numeric.
@@ -47,37 +47,106 @@ complete:
 
 | Task | Status | Commit |
 |------|--------|--------|
-| T1   | TODO   |        |
-| T2   | TODO   |        |
+| T1.1 | TODO   |        |
+| T1.2 | TODO   |        |
+| T1.3 | TODO   |        |
+| T1.4 | TODO   |        |
+| T2.1 | TODO   |        |
+| T2.2 | TODO   |        |
 | T3   | TODO   |        |
-| T4   | TODO   |        |
+| T4.1 | TODO   |        |
+| T4.2 | TODO   |        |
+| T4.3 | TODO   |        |
+| T4.4 | TODO   |        |
 | T5   | TODO   |        |
 | T6   | TODO   |        |
 | T7   | TODO   |        |
-| T8   | TODO   |        |
-| T9   | TODO   |        |
-| T10  | TODO   |        |
 
-### T1 — Split `layout.html` into `layout_auth.html` and `layout_app.html`
+### T1.1 — Add app-shell view contracts
+
+Create the typed data contract that the shell partials and app layout
+will consume before any template starts depending on it.
+
+- Add `internal/server/breadcrumbs.go` defining
+  `type Crumb struct { Label, URL string }`.
+- Add small typed shell/sidebar/topbar view structs in
+  `internal/server` for:
+  - current signed-in handle,
+  - admin/non-admin state,
+  - current path or current section for nav highlighting,
+  - page title,
+  - breadcrumbs.
+- Decide and document in code how app-page handlers provide shell data.
+  Prefer an explicit typed field or method over magic map keys. The
+  renderer may wrap app pages as `{ Page: <page view>, Shell: <shell view> }`,
+  but individual page templates should still receive their existing page
+  view as dot.
+- Keep this task to Go contracts and small tests only; do not retrofit
+  every handler yet.
+
+### T1.2 — Implement the breadcrumbs partial
+
+Per the plan (§5).
+
+- Add `web/templates/partials/breadcrumbs.html` that renders a
+  `[]Crumb` as a `<nav aria-label="Breadcrumb">` containing an
+  `<ol>` with separators.
+- Last crumb (`URL == ""`) renders as
+  `<span aria-current="page">`, not as a link.
+- If the slice is empty, the partial renders nothing (no empty `<nav>`).
+- Add a unit test for the partial: empty slice → empty output; three
+  crumbs with the last lacking a URL → expected HTML shape (link, link,
+  current-page span).
+
+### T1.3 — Implement the sidebar partial
+
+Per the plan (§2), the sidebar reflects facts that are true today. No
+game-scoped links yet (no game model).
+
+- Add `web/templates/partials/sidebar.html`.
+- Always-visible items: **Home** (`/`), **Account** (`/account`, but
+  only if a real page or intentional stub exists; otherwise omit the
+  link rather than adding a dead one).
+- If `is_admin`: an **Admin** section with **Invites**
+  (`/admin/invites`) and **Users** (`/admin/users`).
+- The partial receives the typed sidebar view from T1.1 so it can hide
+  admin items for non-admins and mark the current section with
+  `aria-current="page"`.
+- Add focused render tests for admin and non-admin sidebar states.
+
+### T1.4 — Implement the topbar partial
+
+The topbar is the strip across the top of the app shell's main column.
+
+- Add `web/templates/partials/topbar.html`.
+- Left: the current page title (matching the page's `{{ block "title" }}`).
+- Right: the signed-in handle and a logout form.
+- The partial receives the typed topbar view from T1.1.
+- Move the existing `form.inline` styling decision into T3: prefer
+  `.huck-topbar form` over a general utility rule.
+
+### T2.1 — Split the layout templates
 
 The current `web/templates/layout.html` is a single
-`<main class="container">` shared by every page. Per the plan
-(§3), pre-auth and post-auth pages need different shells.
+`<main class="container">` shared by every page. Per the plan (§3),
+pre-auth and post-auth pages need different shells.
 
 - Create `web/templates/layout_auth.html`: centered, narrow, no
   sidebar, no breadcrumbs. Keeps the current `<main class="container">`
   feel. Used by public home, login, signup, error.
 - Create `web/templates/layout_app.html`: the three-region grid
-  (sidebar | topbar / breadcrumbs / content). Used by every
-  post-login page.
+  (sidebar | topbar / breadcrumbs / content). It includes the T1.2,
+  T1.3, and T1.4 partials.
 - Both layouts keep the existing `{{ block "title" }}`,
-  `{{ block "content" }}`, `{{ block "scripts" }}` contract so
-  pages don't have to learn a new vocabulary.
-- Remove the original `layout.html` once nothing references it.
-- Drop the hard-coded `data-theme="light"` from `<html>` (plan
-  §7). Follow `prefers-color-scheme` instead.
+  `{{ block "content" }}`, `{{ block "scripts" }}` contract. For app
+  pages, the layout may call `content` with the wrapped `.Page` value so
+  existing page templates do not need to use `.Page.CSRF`, `.Page.Rows`,
+  etc.
+- Drop the hard-coded `data-theme="light"` from `<html>` (plan §7).
+  Follow `prefers-color-scheme` instead.
+- Keep `layout.html` in place until T2.2 switches the renderer.
 
-### T2 — Teach the renderer which layout each page uses
+### T2.2 — Teach the renderer which layout each page uses
 
 The `Renderer` in `internal/server` currently picks page-vs-partial
 based on template name and the `HX-Request` header. It now also
@@ -94,6 +163,9 @@ needs to pick *which* page layout to wrap a page in.
     page is added without registration.
 - The renderer is the only place that knows about layout names.
   Handlers and templates do not branch on layout.
+- Ensure app-shell full-page renders wrap data once for the shell while
+  preserving the existing page view as dot for `content` and `scripts`.
+- Remove `web/templates/layout.html` once nothing references it.
 - Add a unit test that renders one auth-shell page and one
   app-shell page and asserts the wrapping layout was used.
 
@@ -116,91 +188,65 @@ Per the plan (§4), the entire Sprint-4 CSS vocabulary is:
   to (but we expect almost none to).
 - Resist the urge to introduce a token / variable system. Use
   Pico's existing variables where possible.
+- Move the old `form.inline` rule to `.huck-topbar form` unless the
+  implementation proves a broader semantic selector is needed.
 
-### T4 — Implement the breadcrumbs partial and Go contract
+### T4.1 — Retrofit auth-shell pages
 
-Per the plan (§5).
+Touch only the auth-shell pages and their immediate render tests:
 
-- Add `internal/server/breadcrumbs.go` defining
-  `type Crumb struct { Label, URL string }`.
-- Add `web/templates/partials/breadcrumbs.html` that renders a
-  `[]Crumb` as a `<nav aria-label="Breadcrumb">` containing an
-  `<ol>` with separators. Last crumb (URL == "") renders as
-  `<span aria-current="page">`, not as a link.
-- The app shell calls the partial unconditionally; if the slice
-  is empty, the partial renders nothing (no empty `<nav>`).
-- Add a unit test for the partial: empty slice → empty output;
-  three crumbs with the last lacking a URL → expected HTML
-  shape (link, link, current-page span).
+- `home_public.html`
+- `login.html`
+- `signup.html`
+- `error.html`
 
-### T5 — Define the app-shell sidebar (today's nav only)
+Confirm these pages render through `layout_auth.html`, remain centered
+and narrow, and do not assume the old `layout.html` wrapper still exists.
 
-Per the plan (§2), the sidebar reflects facts that are true
-today. No game-scoped links yet (no game model).
+### T4.2 — Retrofit the authed home page
 
-- Always-visible items: **Home** (`/`), **Account**
-  (`/account`, but only if a real page or intentional stub exists;
-  otherwise omit the link rather than adding a dead one).
-- If `is_admin`: an **Admin** section with **Invites**
-  (`/admin/invites`) and **Users** (`/admin/users`).
-- The sidebar lives in `web/templates/partials/sidebar.html`
-  and is included by `layout_app.html`. It receives the
-  current-user view data (or a small dedicated `SidebarView`
-  struct) so it can:
-  - hide admin items for non-admins,
-  - mark the current section as `aria-current="page"` so CSS
-    can highlight it.
-- Decide and document: does the sidebar partial receive its
-  own typed view, or does it inspect a field on the page
-  view? Pick the typed view; it keeps each page's view struct
-  honest and avoids a magic field every page must remember to
-  populate. The renderer composes
-  `{ Page: <page view>, Shell: <shell view> }` once.
+Touch the signed-in home path only:
 
-### T6 — Define the app-shell topbar
+- `home_authed.html`
+- `handleHome` and any home view structs/tests
 
-The topbar is the strip across the top of the main column.
+Add shell data with `[Home]` breadcrumbs, correct sidebar/topbar state,
+and a `.huck-page-header` around the H1/header area.
 
-- Left: the current page's title (mirrors `{{ block "title" }}`).
-- Right: the signed-in handle and a logout form.
-- Lives in `web/templates/partials/topbar.html`, included by
-  `layout_app.html`.
-- The existing `form.inline` rule in `app.css` either moves to
-  `.huck-topbar form` (more specific, semantic) or stays as a
-  general utility — pick the former.
+### T4.3 — Retrofit the admin invites page
 
-### T7 — Retrofit existing pages onto the new shells
+Touch the invites admin surface only:
 
-Touch every page in `web/templates/pages/` and confirm:
+- `admin_invites.html`
+- `handleAdminInvitesList`, invite create error/success re-renders, and
+  related tests
 
-- **Auth shell** (`layout_auth.html`):
-  - `home_public.html`
-  - `login.html`
-  - `signup.html`
-  - `error.html`
-- **App shell** (`layout_app.html`):
-  - `home_authed.html`
-  - `admin_invites.html`
-  - `admin_users.html`
-  - `admin_user_view.html`
-  - `admin_user_edit.html`
+Add shell data with `[Home, Admin, Invites]` breadcrumbs, correct current
+sidebar state, `.huck-page-header`, and `.huck-form-stack` where it
+improves form rhythm. Confirm `partials/invite_row.html` remains suitable
+for injection inside `.huck-content`.
 
-For each app-shell page:
+### T4.4 — Retrofit the admin users pages
 
-- Add the breadcrumbs in the handler that renders it. Examples:
-  - `/admin/invites` → `[Home, Admin, Invites]`
-  - `/admin/users` → `[Home, Admin, Users]`
-  - `/admin/users/:id` → `[Home, Admin, Users, <handle>]`
-  - `/admin/users/:id/edit` → `[Home, Admin, Users, <handle>, Edit]`
-  - `/` (authed) → `[Home]` (single crumb is fine; the partial
-    will render it as the current page)
-- Wrap the H1 and any header-level actions in a
-  `.huck-page-header`.
-- Wrap forms in `.huck-form-stack` where it improves rhythm.
-- Confirm no page assumes the old `<main class="container">`
-  wrapper is still present.
+Touch the users admin surface only:
 
-### T8 — Update the renderer's HTMX path to target `.huck-content`
+- `admin_users.html`
+- `admin_user_view.html`
+- `admin_user_edit.html`
+- `handleAdminUsersList`, `handleAdminUsersView`,
+  `handleAdminUsersEditForm`, edit error re-renders, and related tests
+
+Add shell data and breadcrumbs:
+
+- `/admin/users` → `[Home, Admin, Users]`
+- `/admin/users/:id` → `[Home, Admin, Users, <handle>]`
+- `/admin/users/:id/edit` → `[Home, Admin, Users, <handle>, Edit]`
+
+Wrap H1/header actions in `.huck-page-header`, use `.huck-form-stack`
+where it helps forms, and keep URL parameters numeric even when labels
+use handles.
+
+### T5 — Document and verify the HTMX `.huck-content` rule
 
 The plan (§6) says HTMX swaps live inside `.huck-content`. Today
 the renderer already returns partial HTML for `HX-Request`
@@ -219,7 +265,7 @@ calls; the new constraint is just naming the target.
   primarily a code-comment + reviewer-checkpoint task. If a
   divergent partial is found, fix it.
 
-### T9 — Document the deferred items in the right places
+### T6 — Document the deferred items in the right places
 
 So the next sprint reviewer doesn't accidentally re-litigate
 them.
@@ -235,7 +281,7 @@ them.
   primitive vocabulary are defined in
   `docs/front-end-plan.md` and not duplicated in DESIGN.md.
 
-### T10 — Polish notes (small, batch into one PR)
+### T7 — Polish notes (small, batch into one PR)
 
 - Confirm `web/static/app.css` has no rules that contradict the
   Phase-2 primitives (e.g. global `body` margin overrides that
@@ -255,8 +301,9 @@ them.
 - Status cards, upload wizards, validation panels, GM-density
   tables, design tokens, light/dark toggle, mobile hamburger.
   All deferred per `docs/front-end-plan.md` §8.
-- A full Account page (only the *link* is in scope; the page
-  itself can land in Sprint 5).
+- A full Account page. The sidebar may link to `/account` only if a
+  real page or intentional stub exists; otherwise omit the link until
+  Sprint 5.
 - Any change to `internal/auth`, `internal/users`,
   `internal/invites`, or the schema. Sprint 4 is a templates +
   CSS sprint with a tiny renderer change.
@@ -270,8 +317,8 @@ them.
 Per AGENTS.md "Verification before saying 'done'":
 
 - `go build ./...` succeeds.
-- `go test ./...` passes (including the new T2 renderer test
-  and the T4 breadcrumbs test).
+- `go test ./...` passes (including the new T2.2 renderer test
+  and the T1.2 breadcrumbs test).
 - `go vet ./...` is clean.
 - `huck db create --db /tmp/huck-sprint4.db` succeeds on a
   fresh path, and `huck db migrate --db /tmp/huck-sprint4.db`
@@ -296,3 +343,5 @@ Per AGENTS.md "Verification before saying 'done'":
 
 - **2026-05-10** — Drafted from `docs/front-end-plan.md` and
   the Sprint 4 planning thread.
+- **2026-05-10** — Reordered for implementation dependencies and split
+  broad tasks into agent-sized slices.
