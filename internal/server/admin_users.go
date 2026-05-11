@@ -23,16 +23,18 @@ type userRowView struct {
 }
 
 // adminUsersView is the data shape consumed by pages/admin_users.html.
+// Sidebar/topbar chrome lives on the surrounding AppPage.Shell now, so
+// the page-only view no longer carries the signed-in handle.
 type adminUsersView struct {
-	Handle string
 	Notice string
 	Rows   []userRowView
 }
 
-// adminUserView is the data shape consumed by pages/admin_user_view.html
-// and pages/admin_user_edit.html.
+// adminUserView is the data shape consumed by pages/admin_user_view.html,
+// pages/admin_user_edit.html, and pages/account.html (scoped to self).
+// Sidebar/topbar chrome lives on the surrounding AppPage.Shell now, so
+// the page-only view no longer carries the signed-in handle.
 type adminUserView struct {
-	Handle       string
 	User         users.User
 	IsSelf       bool
 	CreatedAt    string
@@ -41,6 +43,75 @@ type adminUserView struct {
 	UpdatedAtISO string
 	Error        string
 	Notice       string
+}
+
+// usersShell builds the [Home, Admin, Users] app-shell context shared by
+// the list page. The per-user view/edit pages extend this trail and live
+// in userDetailShell / userEditShell.
+func usersShell(claims *auth.Claims) ShellView {
+	return ShellView{
+		Sidebar: SidebarView{
+			Handle:  claims.Handle,
+			IsAdmin: claims.Admin,
+			Section: SectionAdminUsers,
+		},
+		Topbar: TopbarView{
+			Handle: claims.Handle,
+			Title:  "Users",
+		},
+		Crumbs: []Crumb{
+			{Label: "Home", URL: "/"},
+			{Label: "Admin", URL: "/admin"},
+			{Label: "Users"},
+		},
+	}
+}
+
+// userDetailShell extends usersShell with the per-user current crumb and
+// switches the topbar title to the user's handle. The Users entry is
+// promoted to a link so the trail reads [Home, Admin, Users, <handle>].
+func userDetailShell(claims *auth.Claims, u users.User) ShellView {
+	return ShellView{
+		Sidebar: SidebarView{
+			Handle:  claims.Handle,
+			IsAdmin: claims.Admin,
+			Section: SectionAdminUsers,
+		},
+		Topbar: TopbarView{
+			Handle: claims.Handle,
+			Title:  u.Handle,
+		},
+		Crumbs: []Crumb{
+			{Label: "Home", URL: "/"},
+			{Label: "Admin", URL: "/admin"},
+			{Label: "Users", URL: "/admin/users"},
+			{Label: u.Handle},
+		},
+	}
+}
+
+// userEditShell extends userDetailShell with the trailing Edit crumb and
+// promotes the user-detail entry to a link so the trail reads
+// [Home, Admin, Users, <handle>, Edit].
+func userEditShell(claims *auth.Claims, u users.User) ShellView {
+	return ShellView{
+		Sidebar: SidebarView{
+			Handle:  claims.Handle,
+			IsAdmin: claims.Admin,
+			Section: SectionAdminUsers,
+		},
+		Topbar: TopbarView{
+			Handle: claims.Handle,
+			Title:  "Edit " + u.Handle,
+		},
+		Crumbs: []Crumb{
+			{Label: "Home", URL: "/"},
+			{Label: "Admin", URL: "/admin"},
+			{Label: "Users", URL: "/admin/users"},
+			{Label: u.Handle, URL: "/admin/users/" + strconv.FormatInt(u.ID, 10)},
+			{Label: "Edit"},
+		},
+	}
 }
 
 // handleAdminUsersList renders the admin users page.
@@ -63,9 +134,9 @@ func (s *Server) handleAdminUsersList(c *echo.Context) error {
 			CreatedAtISO: createdAtISO,
 		})
 	}
-	return c.Render(http.StatusOK, "pages/admin_users.html", adminUsersView{
-		Handle: claims.Handle,
-		Rows:   rows,
+	return c.Render(http.StatusOK, "pages/admin_users.html", AppPage{
+		Page:  adminUsersView{Rows: rows},
+		Shell: usersShell(claims),
 	})
 }
 
@@ -83,8 +154,10 @@ func (s *Server) handleAdminUsersView(c *echo.Context) error {
 		}
 		return err
 	}
-	return c.Render(http.StatusOK, "pages/admin_user_view.html",
-		newAdminUserView(claims, u))
+	return c.Render(http.StatusOK, "pages/admin_user_view.html", AppPage{
+		Page:  newAdminUserView(claims, u),
+		Shell: userDetailShell(claims, u),
+	})
 }
 
 // handleAdminUsersEditForm renders the edit form for one user.
@@ -101,8 +174,10 @@ func (s *Server) handleAdminUsersEditForm(c *echo.Context) error {
 		}
 		return err
 	}
-	return c.Render(http.StatusOK, "pages/admin_user_edit.html",
-		newAdminUserView(claims, u))
+	return c.Render(http.StatusOK, "pages/admin_user_edit.html", AppPage{
+		Page:  newAdminUserView(claims, u),
+		Shell: userEditShell(claims, u),
+	})
 }
 
 // handleAdminUsersEditSubmit applies an is_admin toggle and/or password
@@ -177,7 +252,10 @@ func (s *Server) handleAdminUsersDelete(c *echo.Context) error {
 func (s *Server) renderAdminUserEditError(c *echo.Context, claims *auth.Claims, u users.User, msg string, status int) error {
 	view := newAdminUserView(claims, u)
 	view.Error = msg
-	return c.Render(status, "pages/admin_user_edit.html", view)
+	return c.Render(status, "pages/admin_user_edit.html", AppPage{
+		Page:  view,
+		Shell: userEditShell(claims, u),
+	})
 }
 
 // newAdminUserView decorates a User with the format/self-aware fields the
@@ -186,7 +264,6 @@ func newAdminUserView(claims *auth.Claims, u users.User) adminUserView {
 	createdAt, createdAtISO := fmtUTC(u.CreatedAt)
 	updatedAt, updatedAtISO := fmtUTC(u.UpdatedAt)
 	return adminUserView{
-		Handle:       claims.Handle,
 		User:         u,
 		IsSelf:       u.ID == claims.UserID(),
 		CreatedAt:    createdAt,

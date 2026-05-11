@@ -1,25 +1,7 @@
 {{ define "title" }}huck — edit {{ .User.Handle }}{{ end }}
 
 {{ define "content" }}
-<header>
-    <nav>
-        <ul>
-            <li><strong>huck</strong></li>
-            <li>admin</li>
-            <li><a href="/admin/users">users</a></li>
-            <li><a href="/admin/users/{{ .User.ID }}">{{ .User.Handle }}</a></li>
-        </ul>
-        <ul>
-            <li>signed in as <em>{{ .Handle }}</em></li>
-            <li><a href="/admin/invites">Invites</a></li>
-            <li><a href="/">Home</a></li>
-            <li>
-                <form class="inline" method="post" action="/logout">
-                    <button type="submit" class="secondary">Sign out</button>
-                </form>
-            </li>
-        </ul>
-    </nav>
+<header class="huck-page-header">
     <h1>Edit {{ .User.Handle }}</h1>
 </header>
 
@@ -39,7 +21,7 @@
         <dd>{{ .User.Email }}</dd>
     </dl>
 
-    <form method="post" action="/admin/users/{{ .User.ID }}/edit">
+    <form method="post" action="/admin/users/{{ .User.ID }}/edit" class="huck-form-stack">
         <fieldset>
             <legend>Role</legend>
             <label>
@@ -64,8 +46,10 @@
             <small>12–128 characters. Leave blank to keep the current password.</small>
         </fieldset>
 
-        <button type="submit">Save changes</button>
-        <a href="/admin/users/{{ .User.ID }}" role="button" class="secondary">Cancel</a>
+        <div>
+            <button type="submit">Save changes</button>
+            <a href="/admin/users/{{ .User.ID }}" role="button" class="secondary">Cancel</a>
+        </div>
     </form>
 
     {{ if not .IsSelf }}

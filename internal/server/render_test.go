@@ -486,6 +486,240 @@ func TestAdminIndexRendersAppShell(t *testing.T) {
 	}
 }
 
+// TestAdminUsersListRendersAppShell is the Sprint 4 T4.5 contract test
+// for /admin/users: layout_app.html, [Home, Admin, Users] breadcrumbs
+// (Home and Admin as links, Users as the current page), the admin-users
+// sidebar entry marked current, the topbar carrying the signed-in
+// handle, and the H1 wrapped in .huck-page-header. The legacy in-page
+// <header><nav>…</nav></header> strip and the form.inline utility class
+// must be gone.
+func TestAdminUsersListRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	now := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	formatted, iso := fmtUTC(now)
+	page := adminUsersView{
+		Rows: []userRowView{
+			{
+				ID:           7,
+				Handle:       "alice",
+				Email:        "alice@example.com",
+				IsAdmin:      false,
+				IsSelf:       false,
+				CreatedAt:    formatted,
+				CreatedAtISO: iso,
+			},
+		},
+	}
+	data := AppPage{
+		Page: page,
+		Shell: ShellView{
+			Sidebar: SidebarView{Handle: "admin", IsAdmin: true, Section: SectionAdminUsers},
+			Topbar:  TopbarView{Handle: "admin", Title: "Users"},
+			Crumbs: []Crumb{
+				{Label: "Home", URL: "/"},
+				{Label: "Admin", URL: "/admin"},
+				{Label: "Users"},
+			},
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/admin_users.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`<h1>Users</h1>`,
+		// Page body still receives the original adminUsersView as dot.
+		`alice@example.com`,
+		// Topbar carries the title and the signed-in handle.
+		`<em>admin</em>`,
+		// Breadcrumb: Home and Admin link back, Users is current.
+		`<a href="/">Home</a>`,
+		`<a href="/admin">Admin</a>`,
+		`<span aria-current="page">Users</span>`,
+		// Sidebar: admin-users is the current section.
+		`<a href="/admin/users" aria-current="page">Users</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		`<li><strong>huck</strong></li>`,
+		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
+	}
+}
+
+// TestAdminUsersViewRendersAppShell is the Sprint 4 T4.5 contract test
+// for /admin/users/:id: layout_app.html, [Home, Admin, Users, <handle>]
+// breadcrumbs (the first three as links, the handle as the current page),
+// the admin-users sidebar entry marked current, the topbar title set to
+// the viewed user's handle, and the H1 wrapped in .huck-page-header.
+func TestAdminUsersViewRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	now := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	claims := &auth.Claims{Handle: "admin", Admin: true}
+	u := users.User{
+		ID:        7,
+		Handle:    "alice",
+		Email:     "alice@example.com",
+		IsAdmin:   false,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	data := AppPage{
+		Page:  newAdminUserView(claims, u),
+		Shell: userDetailShell(claims, u),
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/7", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/admin_user_view.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`<h1>alice</h1>`,
+		// Page body still receives the original adminUserView as dot.
+		`alice@example.com`,
+		// Topbar carries the viewed user's handle as the page title.
+		`<em>admin</em>`,
+		// Breadcrumb: Home / Admin / Users link back; the handle is current.
+		`<a href="/">Home</a>`,
+		`<a href="/admin">Admin</a>`,
+		`<a href="/admin/users">Users</a>`,
+		`<span aria-current="page">alice</span>`,
+		// Sidebar: admin-users is the current section.
+		`<a href="/admin/users" aria-current="page">Users</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		`<li><strong>huck</strong></li>`,
+		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
+	}
+}
+
+// TestAdminUsersEditRendersAppShell is the Sprint 4 T4.5 contract test
+// for /admin/users/:id/edit: layout_app.html, the five-entry
+// [Home, Admin, Users, <handle>, Edit] breadcrumbs (the first four as
+// links, Edit as the current page), the admin-users sidebar entry marked
+// current, the topbar carrying the signed-in handle, the H1 wrapped in
+// .huck-page-header, and the edit form carrying .huck-form-stack for
+// vertical rhythm. The URL parameter remains numeric in the per-user
+// link even though the label uses the handle.
+func TestAdminUsersEditRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	now := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	claims := &auth.Claims{Handle: "admin", Admin: true}
+	u := users.User{
+		ID:        7,
+		Handle:    "alice",
+		Email:     "alice@example.com",
+		IsAdmin:   false,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	data := AppPage{
+		Page:  newAdminUserView(claims, u),
+		Shell: userEditShell(claims, u),
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/7/edit", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/admin_user_edit.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`<h1>Edit alice</h1>`,
+		// The edit form gets .huck-form-stack for vertical rhythm.
+		`class="huck-form-stack"`,
+		// Page body still receives the original adminUserView as dot.
+		`name="is_admin"`,
+		`name="password"`,
+		// Topbar carries the signed-in handle.
+		`<em>admin</em>`,
+		// Breadcrumb: Home / Admin / Users / <handle> link back; Edit is current.
+		`<a href="/">Home</a>`,
+		`<a href="/admin">Admin</a>`,
+		`<a href="/admin/users">Users</a>`,
+		// The per-user link must keep the numeric id even though the
+		// label uses the handle (sprint plan T4.5: "keep URL parameters
+		// numeric even when labels use handles").
+		`<a href="/admin/users/7">alice</a>`,
+		`<span aria-current="page">Edit</span>`,
+		// Sidebar: admin-users is the current section.
+		`<a href="/admin/users" aria-current="page">Users</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		`<li><strong>huck</strong></li>`,
+		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
+	}
+}
+
 // TestAdminInvitesRendersAppShell is the Sprint 4 T4.4 contract test for
 // the admin invites page: layout_app.html, [Home, Admin, Invites]
 // breadcrumbs (Home and Admin as links, Invites as the current page),
