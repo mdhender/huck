@@ -1,0 +1,46 @@
+{{ define "partials/sidebar.html" -}}
+<nav aria-label="Primary" class="huck-sidebar">
+    <ul>
+        <li>
+            {{- if eq .Section "home" }}
+            <a href="/" aria-current="page">Home</a>
+            {{- else }}
+            <a href="/">Home</a>
+            {{- end }}
+        </li>
+        <li>
+            {{- if eq .Section "account" }}
+            <a href="/account" aria-current="page">Account</a>
+            {{- else }}
+            <a href="/account">Account</a>
+            {{- end }}
+        </li>
+    </ul>
+    {{- if .IsAdmin }}
+    <h2>Admin</h2>
+    <ul>
+        <li>
+            {{- if eq .Section "admin-dashboard" }}
+            <a href="/admin" aria-current="page">Dashboard</a>
+            {{- else }}
+            <a href="/admin">Dashboard</a>
+            {{- end }}
+        </li>
+        <li>
+            {{- if eq .Section "admin-invites" }}
+            <a href="/admin/invites" aria-current="page">Invites</a>
+            {{- else }}
+            <a href="/admin/invites">Invites</a>
+            {{- end }}
+        </li>
+        <li>
+            {{- if eq .Section "admin-users" }}
+            <a href="/admin/users" aria-current="page">Users</a>
+            {{- else }}
+            <a href="/admin/users">Users</a>
+            {{- end }}
+        </li>
+    </ul>
+    {{- end }}
+</nav>
+{{- end }}
