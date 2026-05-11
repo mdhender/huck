@@ -111,7 +111,7 @@ complete:
 | T1.1 | DONE   |        | Added `Crumb`, `SidebarView`, `TopbarView`, `ShellView`, `AppPage` in `internal/server/breadcrumbs.go` plus `Section*` constants and a small contract test. Renderer wrapping and handler retrofits deferred to T2.2 / T4.x per task scope. |
 | T1.2 | DONE   |        | Added `web/templates/partials/breadcrumbs.html` rendering `[]Crumb` as `<nav aria-label="Breadcrumb">` + `<ol>` with `/` separators; empty slice → no output; final crumb (URL=="") → `<span aria-current="page">`. Tests in `internal/server/breadcrumbs_test.go` cover both shapes. |
 | T1.3 | DONE   |        | Added `web/templates/partials/sidebar.html` rendering the typed `SidebarView`: always-visible Home/Account, admin-only Dashboard/Invites/Users under an `<h2>Admin</h2>`, and `aria-current="page"` on the entry whose link matches `Section`. Tests in `internal/server/sidebar_test.go` cover non-admin (admin section absent), admin (admin section present), and one active-section case per `Section*` constant. |
-| T1.4 | TODO   |        |       |
+| T1.4 | DONE   |        | Added `web/templates/partials/topbar.html` rendering the typed `TopbarView` as a `<header class="huck-topbar">` with the page title on the left and the signed-in handle + plain POST `/logout` form on the right. Form carries no `class="inline"` — `.huck-topbar form` styling lands in T3. Test in `internal/server/topbar_test.go` pins the shape and the title-before-handle source order. |
 | T2.1 | TODO   |        |       |
 | T2.2 | TODO   |        |       |
 | T3   | TODO   |        |       |

@@ -1,0 +1,11 @@
+{{ define "partials/topbar.html" -}}
+<header class="huck-topbar">
+    <div class="huck-topbar__title">{{ .Title }}</div>
+    <div class="huck-topbar__user">
+        <span>signed in as <em>{{ .Handle }}</em></span>
+        <form method="post" action="/logout">
+            <button type="submit" class="secondary">Sign out</button>
+        </form>
+    </div>
+</header>
+{{- end }}
