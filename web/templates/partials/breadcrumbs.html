@@ -1,0 +1,16 @@
+{{ define "partials/breadcrumbs.html" -}}
+{{- if . -}}
+<nav aria-label="Breadcrumb" class="huck-breadcrumbs">
+    <ol>
+        {{- range $i, $c := . }}
+            {{- if $i }}<li aria-hidden="true" class="huck-breadcrumbs__sep">/</li>{{ end }}
+            {{- if $c.Current }}
+            <li><span aria-current="page">{{ $c.Label }}</span></li>
+            {{- else }}
+            <li><a href="{{ $c.URL }}">{{ $c.Label }}</a></li>
+            {{- end }}
+        {{- end }}
+    </ol>
+</nav>
+{{- end -}}
+{{- end }}

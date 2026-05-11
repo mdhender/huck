@@ -109,7 +109,7 @@ complete:
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
 | T1.1 | DONE   |        | Added `Crumb`, `SidebarView`, `TopbarView`, `ShellView`, `AppPage` in `internal/server/breadcrumbs.go` plus `Section*` constants and a small contract test. Renderer wrapping and handler retrofits deferred to T2.2 / T4.x per task scope. |
-| T1.2 | TODO   |        |       |
+| T1.2 | DONE   |        | Added `web/templates/partials/breadcrumbs.html` rendering `[]Crumb` as `<nav aria-label="Breadcrumb">` + `<ol>` with `/` separators; empty slice → no output; final crumb (URL=="") → `<span aria-current="page">`. Tests in `internal/server/breadcrumbs_test.go` cover both shapes. |
 | T1.3 | TODO   |        |       |
 | T1.4 | TODO   |        |       |
 | T2.1 | TODO   |        |       |
