@@ -180,6 +180,72 @@ func TestAuthShellPagesUseAuthLayout(t *testing.T) {
 	}
 }
 
+// TestAuthedHomeRendersAppShell is the Sprint 4 T4.2 contract test: the
+// signed-in home page renders through layout_app.html with the [Home]
+// breadcrumb trail (final crumb current), the sidebar Home entry marked
+// current, the topbar carrying the signed-in handle, and the page H1
+// wrapped in .huck-page-header. The old in-page <header><nav>…</nav></header>
+// strip is gone — the topbar/sidebar own that chrome now.
+func TestAuthedHomeRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	data := AppPage{
+		Page: homeAuthedView{Handle: "alice"},
+		Shell: ShellView{
+			Sidebar: SidebarView{Handle: "alice", IsAdmin: true, Section: SectionHome},
+			Topbar:  TopbarView{Handle: "alice", Title: "Welcome"},
+			Crumbs:  []Crumb{{Label: "Home"}},
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/home_authed.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`welcome to huck, alice`,
+		// Topbar carries the page title and the signed-in handle.
+		`Welcome`,
+		`<em>alice</em>`,
+		// Breadcrumb: single [Home] entry rendered as the current page.
+		`<span aria-current="page">Home</span>`,
+		// Sidebar: Home is the current section.
+		`<a href="/" aria-current="page">Home</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		// Old in-page brand crumb / nav signals — the topbar owns the
+		// strip now, so these must not survive the retrofit.
+		`<li><strong>huck</strong></li>`,
+		// The legacy logout form carried class="inline"; the topbar form
+		// drops that class (per Sprint 4 T3, .huck-topbar form styling
+		// replaces the old form.inline utility).
+		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
+	}
+}
+
 // TestRendererPicksLayoutPerPage is the Sprint 4 T2.2 contract test:
 // the renderer chooses layout_auth.html for an auth-shell page and
 // layout_app.html for an app-shell page, based on its registration in

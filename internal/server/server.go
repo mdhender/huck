@@ -140,12 +140,11 @@ func (s *Server) installRoutes() {
 type homePublicView struct{}
 
 // homeAuthedView is the data shape consumed by pages/home_authed.html.
-// Distinct from homePublicView because the authed home page moves to the
-// app shell in Sprint 4 and will grow shell/breadcrumb context that the
-// public page must not carry.
+// Distinct from homePublicView because the authed home page renders in
+// the app shell; shell/breadcrumb context is supplied separately via
+// AppPage.Shell and must not be carried by this page-only view.
 type homeAuthedView struct {
 	Handle string
-	Admin  bool
 }
 
 // adminIndexView is the data shape consumed by pages/admin.html.
@@ -166,11 +165,29 @@ func (s *Server) handleAdminIndex(c *echo.Context) error {
 // handleHome renders home_public.html for anonymous visitors and
 // home_authed.html for authenticated ones. Best-effort auth: an
 // invalid/missing/expired cookie just means anonymous, never 401.
+//
+// The authed branch supplies the full app-shell context (sidebar
+// section, topbar handle/title, and a single [Home] breadcrumb) as an
+// AppPage; the renderer hands the inner homeAuthedView to the page's
+// content block so the template still receives its own page view as dot.
 func (s *Server) handleHome(c *echo.Context) error {
 	if claims, ok := s.bestEffortClaims(c); ok {
-		return c.Render(http.StatusOK, "pages/home_authed.html", homeAuthedView{
-			Handle: claims.Handle,
-			Admin:  claims.Admin,
+		return c.Render(http.StatusOK, "pages/home_authed.html", AppPage{
+			Page: homeAuthedView{
+				Handle: claims.Handle,
+			},
+			Shell: ShellView{
+				Sidebar: SidebarView{
+					Handle:  claims.Handle,
+					IsAdmin: claims.Admin,
+					Section: SectionHome,
+				},
+				Topbar: TopbarView{
+					Handle: claims.Handle,
+					Title:  "Welcome",
+				},
+				Crumbs: []Crumb{{Label: "Home"}},
+			},
 		})
 	}
 	return c.Render(http.StatusOK, "pages/home_public.html", homePublicView{})
