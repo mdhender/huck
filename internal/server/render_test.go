@@ -86,6 +86,100 @@ func TestRendererDispatch(t *testing.T) {
 	}
 }
 
+// TestAuthShellPagesUseAuthLayout is the Sprint 4 T4.1 contract test:
+// every auth-shell page (public home, login, signup, error) must render
+// through layout_auth.html. The auth layout's distinguishing marks are
+// the centered <main class="container"> wrapper and the absence of any
+// app-shell grid chrome (.huck-shell, .huck-sidebar). The page-specific
+// content slot must still render so the layout swap did not silently
+// drop the page body. This test pins each page rather than only one
+// representative so a future re-registration in pageLayouts cannot
+// quietly move a page into the app shell.
+func TestAuthShellPagesUseAuthLayout(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	cases := []struct {
+		name         string
+		template     string
+		data         any
+		wantContains []string // page-specific content slot evidence
+	}{
+		{
+			name:         "home_public",
+			template:     "pages/home_public.html",
+			data:         homePublicView{},
+			wantContains: []string{"What is huck?"},
+		},
+		{
+			name:         "login",
+			template:     "pages/login.html",
+			data:         loginView{},
+			wantContains: []string{"Sign in"},
+		},
+		{
+			name:     "signup",
+			template: "pages/signup.html",
+			data: signupView{
+				Token: "tok-123",
+				Email: "alice@example.com",
+			},
+			wantContains: []string{"Create your account", "alice@example.com"},
+		},
+		{
+			name:     "error",
+			template: "pages/error.html",
+			data: errorView{
+				Status:     404,
+				StatusText: "Not Found",
+				Message:    "no such page",
+			},
+			wantContains: []string{"404", "Not Found", "no such page"},
+		},
+	}
+
+	e := echo.New()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			var buf strings.Builder
+			if err := r.Render(c, &buf, tc.template, tc.data); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			out := buf.String()
+
+			for _, want := range []string{
+				`<!doctype html>`,
+				`<main class="container">`,
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("auth-shell page %s missing %q\n--- output ---\n%s", tc.name, want, out)
+				}
+			}
+			for _, bad := range []string{
+				`huck-shell`,
+				`huck-sidebar`,
+				`huck-topbar`,
+				`huck-breadcrumbs`,
+			} {
+				if strings.Contains(out, bad) {
+					t.Errorf("auth-shell page %s should not contain app-shell marker %q\n--- output ---\n%s", tc.name, bad, out)
+				}
+			}
+			for _, want := range tc.wantContains {
+				if !strings.Contains(out, want) {
+					t.Errorf("auth-shell page %s missing page-specific content %q\n--- output ---\n%s", tc.name, want, out)
+				}
+			}
+		})
+	}
+}
+
 // TestRendererPicksLayoutPerPage is the Sprint 4 T2.2 contract test:
 // the renderer chooses layout_auth.html for an auth-shell page and
 // layout_app.html for an app-shell page, based on its registration in
