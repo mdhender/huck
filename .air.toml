@@ -11,7 +11,7 @@ tmp_dir = "tmp"
   args_bin = ["serve", "--addr", ":9797", "--base-url", "http://localhost:9797"]
   delay = 1000
   include_dir = ["cmd", "internal", "migrations", "web"]
-  include_ext = ["go", "html", "sql"]
+  include_ext = ["go", "html", "sql", "css", "js"]
   exclude_regex = ["_test\\.go$"]
   kill_delay = 500
 
