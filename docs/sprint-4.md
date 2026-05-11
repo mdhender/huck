@@ -108,7 +108,7 @@ complete:
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
-| T1.1 | TODO   |        |       |
+| T1.1 | DONE   |        | Added `Crumb`, `SidebarView`, `TopbarView`, `ShellView`, `AppPage` in `internal/server/breadcrumbs.go` plus `Section*` constants and a small contract test. Renderer wrapping and handler retrofits deferred to T2.2 / T4.x per task scope. |
 | T1.2 | TODO   |        |       |
 | T1.3 | TODO   |        |       |
 | T1.4 | TODO   |        |       |
