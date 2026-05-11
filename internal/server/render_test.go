@@ -792,3 +792,86 @@ func TestAdminInvitesRendersAppShell(t *testing.T) {
 		}
 	}
 }
+
+// TestHeadTitleRendersThroughBothShells is the Sprint 4 T7 regression test
+// for the <head><title>…</title></head> element. Splitting layout.html into
+// layout_auth.html and layout_app.html changed what dot is when the title
+// block evaluates: auth pages get the page view as dot directly, while app
+// pages get the AppPage wrapper and the layout calls the title block with
+// .Page so existing page templates keep working. This test pins all three
+// combinations so a future refactor cannot silently regress the title:
+//   - auth shell, static title (login)
+//   - app shell, static title (authed home, wrapped in AppPage)
+//   - app shell, dynamic title that reads a page-view field (admin user
+//     edit; proves {{ block "title" .Page }} threads the page view through)
+func TestHeadTitleRendersThroughBothShells(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	now := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	editClaims := &auth.Claims{Handle: "admin", Admin: true}
+	editUser := users.User{
+		ID:        7,
+		Handle:    "alice",
+		Email:     "alice@example.com",
+		IsAdmin:   false,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	cases := []struct {
+		name      string
+		template  string
+		data      any
+		wantTitle string
+	}{
+		{
+			name:      "auth shell static title",
+			template:  "pages/login.html",
+			data:      loginView{},
+			wantTitle: "<title>huck — sign in</title>",
+		},
+		{
+			name:     "app shell static title",
+			template: "pages/home_authed.html",
+			data: AppPage{
+				Page: homeAuthedView{Handle: "alice"},
+				Shell: ShellView{
+					Sidebar: SidebarView{Handle: "alice", Section: SectionHome},
+					Topbar:  TopbarView{Handle: "alice", Title: "Welcome"},
+					Crumbs:  []Crumb{{Label: "Home"}},
+				},
+			},
+			wantTitle: "<title>huck — welcome</title>",
+		},
+		{
+			name:     "app shell dynamic title reads page-view field",
+			template: "pages/admin_user_edit.html",
+			data: AppPage{
+				Page:  newAdminUserView(editClaims, editUser),
+				Shell: userEditShell(editClaims, editUser),
+			},
+			wantTitle: "<title>huck — edit alice</title>",
+		},
+	}
+
+	e := echo.New()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			var buf strings.Builder
+			if err := r.Render(c, &buf, tc.template, tc.data); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			out := buf.String()
+			if !strings.Contains(out, tc.wantTitle) {
+				t.Errorf("missing %q\n--- output ---\n%s", tc.wantTitle, out)
+			}
+		})
+	}
+}
