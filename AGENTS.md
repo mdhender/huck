@@ -104,6 +104,26 @@ docs/                # DESIGN.md, sprint plans, front-end notes
   and the `HX-Request` header. Handlers should not branch on `HX-Request`
   themselves.
 
+## Front-end conventions
+
+The working plan for Huck's front end — the two-shell split, the named
+Phase-2 CSS primitives, the breadcrumb data contract, and the explicit
+"not yet" list — lives in [docs/front-end-plan.md](docs/front-end-plan.md).
+Read it before changing layouts, sidebars, breadcrumbs, or `web/static/app.css`.
+
+Deliberately deferred (see plan §8 — do not add without updating the plan first):
+
+- **No Tailwind** (or Bootstrap, DaisyUI, etc.) — Pico.css only.
+- **No utility classes.** Prefer semantic selectors layered on Pico.
+- **No design tokens / CSS custom-property system yet.** Use Pico's
+  variables; introduce a `--huck-*` variable only when a real pattern
+  forces it.
+- **No mobile hamburger / sidebar collapse JS.** Narrow viewports get
+  the stacked single-column fallback; that is the whole mobile story
+  for now.
+- **No forced theme.** Do not pin `data-theme="light"` (or dark) on
+  `<html>`; follow `prefers-color-scheme`.
+
 ## Migrations
 
 - New schema changes go in `migrations/NNNN_short_name.sql`, where `NNNN` is

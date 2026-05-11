@@ -539,6 +539,12 @@ AlpineJS handles small client-side interactions (toggles, dropdowns).
 HTMX handles partial updates (e.g. updating a single row in the invite
 list after resend/revoke).
 
+The Sprint-4 layout split (`layout_auth.html` vs. `layout_app.html`) and
+the named Phase-2 CSS primitive vocabulary (`.huck-shell`, `.huck-sidebar`,
+`.huck-topbar`, `.huck-breadcrumbs`, `.huck-content`, `.huck-page-header`,
+`.huck-form-stack`) are defined in
+[`docs/front-end-plan.md`](front-end-plan.md) and are not duplicated here.
+
 ## 12. Security headers
 
 Set on every response:
