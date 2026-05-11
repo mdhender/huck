@@ -1,9 +1,111 @@
 /* huck-specific style overrides.
  * Loaded after pico.min.css. Prefer semantic selectors over utility classes.
+ *
+ * Phase-2 layout primitives (docs/front-end-plan.md §4). The entire
+ * Sprint-4 CSS vocabulary lives below:
+ *   .huck-shell, .huck-sidebar, .huck-topbar, .huck-breadcrumbs,
+ *   .huck-content, .huck-page-header, .huck-form-stack
+ * No utility classes, no modifiers, no design tokens. Add a rule only
+ * when a real second use case proves it is needed.
  */
 
-/* Inline logout form on the authed home page. */
-form.inline {
-    display: inline;
+/* App shell: two-column grid (sidebar | main) on desktop; sidebar stacks
+ * above main when the viewport narrows. The collapse breakpoint is 768px
+ * — below it we drop to a single-column layout. No hamburger; the mobile
+ * pattern is deferred per docs/front-end-plan.md §8.
+ */
+.huck-shell {
+    display: grid;
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+    min-height: 100vh;
 }
 
+@media (max-width: 768px) {
+    .huck-shell {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Sidebar: persistent left nav. Pico styles links and headings; we only
+ * supply the column chrome and tighter list spacing.
+ */
+.huck-sidebar {
+    padding: 1rem;
+    border-right: 1px solid var(--pico-muted-border-color);
+}
+
+.huck-sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.huck-sidebar li > a {
+    display: block;
+    padding: 0.25rem 0;
+}
+
+.huck-sidebar h2 {
+    font-size: 0.875rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin: 1rem 0 0.25rem;
+}
+
+/* Topbar: page title on the left, signed-in handle + logout on the right.
+ * The logout form lives inline here; this rule replaces the old form.inline.
+ */
+.huck-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+
+.huck-topbar form {
+    display: inline;
+    margin: 0;
+}
+
+/* Breadcrumbs: horizontal list rendered by partials/breadcrumbs.html. */
+.huck-breadcrumbs {
+    padding: 0.5rem 1rem;
+}
+
+.huck-breadcrumbs ol {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0;
+    margin: 0;
+}
+
+/* Content region: width-controlled for prose-heavy pages. Tables and
+ * dashboards that need full width override --huck-content-max inline
+ * (e.g. style="--huck-content-max: none"). HTMX swaps target this region.
+ */
+.huck-content {
+    --huck-content-max: 80ch;
+    max-width: var(--huck-content-max);
+    padding: 1rem;
+}
+
+/* Page header: H1 + optional action row, baseline-aligned. */
+.huck-page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Form stack: vertical rhythm for player-facing forms. */
+.huck-form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
