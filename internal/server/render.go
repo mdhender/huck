@@ -207,6 +207,27 @@ func unwrapAppPage(data any) any {
 	return data
 }
 
+// HTMX swap target: .huck-content
+//
+// Per docs/front-end-plan.md §6, the app shell renders once per full-page
+// load; HTMX swaps target fragments inside .huck-content and never replace
+// the sidebar, topbar, or breadcrumb regions. The renderer enforces the
+// response side of this rule: pages/* + HX-Request returns the page's
+// "content" block alone, and the partials handlers actually render through
+// c.Render (partials/error.html, partials/invite_row.html) are written as
+// content-region HTML — no top-level <main> and no .huck-shell /
+// .huck-sidebar / .huck-topbar / .huck-breadcrumbs markers. The shell
+// partials (partials/sidebar.html, partials/topbar.html,
+// partials/breadcrumbs.html) do carry shell classes but are only invoked
+// from layout_app.html via {{ template … }}, never as HX responses.
+//
+// If a future interaction needs to update something *outside* .huck-content
+// (e.g. flipping a user's admin flag should refresh the sidebar), the
+// handler should set HX-Refresh: true on the response instead of returning
+// a partial. That tells HTMX to do a full-page reload, which re-renders
+// the shell from scratch — much cheaper than teaching every state-changing
+// handler to swap out shell regions piecemeal.
+//
 // hxRedirect issues a redirect that works for both HTMX and non-HTMX
 // requests. HTMX would swallow a 303 inside its swap pipeline, so for
 // HX-Request it sets the HX-Redirect header on a 204 No Content; other
