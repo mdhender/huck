@@ -5,8 +5,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
+
+	"github.com/mdhender/huck/internal/auth"
+	"github.com/mdhender/huck/internal/users"
 )
 
 // TestRendererDispatch pins the page-vs-partial dispatch contract. A
@@ -239,6 +243,86 @@ func TestAuthedHomeRendersAppShell(t *testing.T) {
 		// drops that class (per Sprint 4 T3, .huck-topbar form styling
 		// replaces the old form.inline utility).
 		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
+	}
+}
+
+// TestAccountRendersAppShell is the Sprint 4 T4.3 contract test: the
+// /account page renders through layout_app.html with the [Home, Account]
+// breadcrumb trail (Home as a link, Account as the current page), the
+// sidebar Account entry marked current, the topbar carrying the
+// signed-in handle, and the H1 wrapped in .huck-page-header. The legacy
+// in-page <header><nav>…</nav></header> strip is gone — the topbar and
+// sidebar own that chrome now.
+func TestAccountRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	now := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	claims := &auth.Claims{Handle: "alice", Admin: false}
+	page := newAdminUserView(claims, users.User{
+		ID:        7,
+		Handle:    "alice",
+		Email:     "alice@example.com",
+		IsAdmin:   false,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	data := AppPage{
+		Page: page,
+		Shell: ShellView{
+			Sidebar: SidebarView{Handle: "alice", IsAdmin: false, Section: SectionAccount},
+			Topbar:  TopbarView{Handle: "alice", Title: "Account"},
+			Crumbs:  []Crumb{{Label: "Home", URL: "/"}, {Label: "Account"}},
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/account", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/account.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`<h1>Account</h1>`,
+		// Page body still receives the original adminUserView as dot.
+		`alice@example.com`,
+		// Topbar carries the title and the signed-in handle.
+		`Account`,
+		`<em>alice</em>`,
+		// Breadcrumb: Home links back, Account is the current page.
+		`<a href="/">Home</a>`,
+		`<span aria-current="page">Account</span>`,
+		// Sidebar: Account is the current section.
+		`<a href="/account" aria-current="page">Account</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		// Old in-page brand crumb — the topbar owns this now.
+		`<li><strong>huck</strong></li>`,
+		// The legacy logout form carried class="inline"; .huck-topbar form
+		// styling replaces that utility per Sprint 4 T3.
+		`class="inline"`,
+		// A non-admin account view must not show the Admin sidebar section.
+		`<h2>Admin</h2>`,
 	} {
 		if strings.Contains(out, bad) {
 			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)

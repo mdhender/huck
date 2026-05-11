@@ -10,9 +10,10 @@ import (
 )
 
 // handleAccount renders the signed-in user's account detail page. The
-// view shares the data shape of pages/admin_user_view.html scoped to
-// the current user, so Sprint 4's layout sprint can swap the template
-// without revisiting the data contract.
+// page view shares the data shape of pages/admin_user_view.html scoped
+// to the current user; the renderer wraps it in an [AppPage] so the
+// app-shell sidebar/topbar/breadcrumbs see the typed shell view while
+// the template's content block still receives the original page view.
 //
 // The route is mounted under requireAuth, so anonymous requests have
 // already been redirected to /login. A missing user row implies a
@@ -28,6 +29,22 @@ func (s *Server) handleAccount(c *echo.Context) error {
 		}
 		return err
 	}
-	return c.Render(http.StatusOK, "pages/account.html",
-		newAdminUserView(claims, u))
+	return c.Render(http.StatusOK, "pages/account.html", AppPage{
+		Page: newAdminUserView(claims, u),
+		Shell: ShellView{
+			Sidebar: SidebarView{
+				Handle:  claims.Handle,
+				IsAdmin: claims.Admin,
+				Section: SectionAccount,
+			},
+			Topbar: TopbarView{
+				Handle: claims.Handle,
+				Title:  "Account",
+			},
+			Crumbs: []Crumb{
+				{Label: "Home", URL: "/"},
+				{Label: "Account"},
+			},
+		},
+	})
 }
