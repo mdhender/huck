@@ -26,22 +26,36 @@
     }
 }
 
-/* Sidebar: persistent left nav. Pico styles links and headings; we only
- * supply the column chrome and tighter list spacing.
+/* Sidebar: persistent left nav. Pico's classless <nav> defaults assume a
+ * horizontal top-nav bar (`nav, nav ul { display: flex }` plus
+ * `nav { justify-content: space-between }` and `nav li { display:
+ * inline-block }`), so we explicitly turn flex off here and force a
+ * block-level stack. The negative-margin reset on links neutralises
+ * Pico's `nav li :where(a) { margin: ... }` so anchors sit flush with
+ * the column padding instead of poking outside it.
  */
 .huck-sidebar {
+    display: block;
     padding: 1rem;
     border-right: 1px solid var(--pico-muted-border-color);
 }
 
 .huck-sidebar ul {
+    display: block;
     list-style: none;
     padding: 0;
     margin: 0;
 }
 
+.huck-sidebar li {
+    display: block;
+    margin: 0;
+    padding: 0;
+}
+
 .huck-sidebar li > a {
     display: block;
+    margin: 0;
     padding: 0.25rem 0;
 }
 
