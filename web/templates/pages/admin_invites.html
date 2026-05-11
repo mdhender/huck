@@ -1,23 +1,7 @@
 {{ define "title" }}huck — admin invites{{ end }}
 
 {{ define "content" }}
-<header>
-    <nav>
-        <ul>
-            <li><strong>huck</strong></li>
-            <li>admin</li>
-        </ul>
-        <ul>
-            <li>signed in as <em>{{ .Handle }}</em></li>
-            <li><a href="/admin/users">Users</a></li>
-            <li><a href="/">Home</a></li>
-            <li>
-                <form class="inline" method="post" action="/logout">
-                    <button type="submit" class="secondary">Sign out</button>
-                </form>
-            </li>
-        </ul>
-    </nav>
+<header class="huck-page-header">
     <h1>Invites</h1>
 </header>
 
@@ -28,7 +12,7 @@
     {{ if .Notice }}
         <p><em>{{ .Notice }}</em></p>
     {{ end }}
-    <form method="post" action="/admin/invites">
+    <form method="post" action="/admin/invites" class="huck-form-stack">
         <label>
             Email
             <input type="email" name="email" required autofocus

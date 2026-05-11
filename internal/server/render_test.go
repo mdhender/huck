@@ -365,7 +365,7 @@ func TestRendererPicksLayoutPerPage(t *testing.T) {
 		{
 			name:     "app-shell page uses layout_app.html",
 			template: "pages/admin.html",
-			data:     adminIndexView{Handle: "alice"},
+			data:     adminIndexView{},
 			wantContains: []string{
 				`<!doctype html>`,
 				`huck-shell`,
@@ -380,7 +380,7 @@ func TestRendererPicksLayoutPerPage(t *testing.T) {
 			name:     "app-shell page accepts an AppPage wrapper",
 			template: "pages/admin.html",
 			data: AppPage{
-				Page: adminIndexView{Handle: "alice"},
+				Page: adminIndexView{},
 				Shell: ShellView{
 					Sidebar: SidebarView{Handle: "alice", IsAdmin: true, Section: SectionAdminDashboard},
 					Topbar:  TopbarView{Handle: "alice", Title: "Admin"},
@@ -418,5 +418,143 @@ func TestRendererPicksLayoutPerPage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestAdminIndexRendersAppShell is the Sprint 4 T4.4 contract test for
+// the admin dashboard page: layout_app.html, [Home, Admin] breadcrumbs
+// (Home as a link, Admin as the current page), the admin-dashboard
+// sidebar entry marked current, the topbar carrying the signed-in
+// handle, and the H1 wrapped in .huck-page-header. The legacy in-page
+// <header><nav>…</nav></header> strip and the form.inline utility class
+// must be gone — the topbar and sidebar own that chrome now.
+func TestAdminIndexRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	data := AppPage{
+		Page: adminIndexView{},
+		Shell: ShellView{
+			Sidebar: SidebarView{Handle: "admin", IsAdmin: true, Section: SectionAdminDashboard},
+			Topbar:  TopbarView{Handle: "admin", Title: "Admin"},
+			Crumbs:  []Crumb{{Label: "Home", URL: "/"}, {Label: "Admin"}},
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/admin.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`<h1>Admin</h1>`,
+		// Topbar carries the title and the signed-in handle.
+		`<em>admin</em>`,
+		// Breadcrumb: Home links back, Admin is the current page.
+		`<a href="/">Home</a>`,
+		`<span aria-current="page">Admin</span>`,
+		// Sidebar: admin-dashboard is the current section.
+		`<a href="/admin" aria-current="page">Dashboard</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		// Old in-page brand crumb — the topbar owns this now.
+		`<li><strong>huck</strong></li>`,
+		// The legacy logout form carried class="inline"; the topbar form
+		// replaces that utility per Sprint 4 T3.
+		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
+	}
+}
+
+// TestAdminInvitesRendersAppShell is the Sprint 4 T4.4 contract test for
+// the admin invites page: layout_app.html, [Home, Admin, Invites]
+// breadcrumbs (Home and Admin as links, Invites as the current page),
+// the admin-invites sidebar entry marked current, the topbar carrying
+// the signed-in handle, the H1 wrapped in .huck-page-header, and the
+// create form carrying .huck-form-stack for vertical rhythm. The legacy
+// in-page <header><nav>…</nav></header> strip and the form.inline utility
+// class must be gone.
+func TestAdminInvitesRendersAppShell(t *testing.T) {
+	r, err := NewRenderer()
+	if err != nil {
+		t.Fatalf("NewRenderer: %v", err)
+	}
+
+	data := AppPage{
+		Page: adminInvitesView{},
+		Shell: ShellView{
+			Sidebar: SidebarView{Handle: "admin", IsAdmin: true, Section: SectionAdminInvites},
+			Topbar:  TopbarView{Handle: "admin", Title: "Invites"},
+			Crumbs: []Crumb{
+				{Label: "Home", URL: "/"},
+				{Label: "Admin", URL: "/admin"},
+				{Label: "Invites"},
+			},
+		},
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/admin/invites", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	var buf strings.Builder
+	if err := r.Render(c, &buf, "pages/admin_invites.html", data); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<!doctype html>`,
+		`huck-shell`,
+		`huck-sidebar`,
+		`huck-topbar`,
+		`class="huck-page-header"`,
+		`<h1>Invites</h1>`,
+		// The create form gets .huck-form-stack for vertical rhythm.
+		`class="huck-form-stack"`,
+		// Topbar carries the signed-in handle.
+		`<em>admin</em>`,
+		// Breadcrumb: Home and Admin link back, Invites is current.
+		`<a href="/">Home</a>`,
+		`<a href="/admin">Admin</a>`,
+		`<span aria-current="page">Invites</span>`,
+		// Sidebar: admin-invites is the current section.
+		`<a href="/admin/invites" aria-current="page">Invites</a>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+	for _, bad := range []string{
+		// Old in-page brand crumb — the topbar owns this now.
+		`<li><strong>huck</strong></li>`,
+		// The legacy logout form carried class="inline"; the topbar form
+		// replaces that utility per Sprint 4 T3.
+		`class="inline"`,
+	} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
+		}
 	}
 }

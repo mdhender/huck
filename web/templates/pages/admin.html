@@ -1,24 +1,7 @@
 {{ define "title" }}huck — admin{{ end }}
 
 {{ define "content" }}
-<header>
-    <nav>
-        <ul>
-            <li><strong>huck</strong></li>
-            <li>admin</li>
-        </ul>
-        <ul>
-            <li>signed in as <em>{{ .Handle }}</em></li>
-            <li><a href="/admin/invites">Invites</a></li>
-            <li><a href="/admin/users">Users</a></li>
-            <li><a href="/">Home</a></li>
-            <li>
-                <form class="inline" method="post" action="/logout">
-                    <button type="submit" class="secondary">Sign out</button>
-                </form>
-            </li>
-        </ul>
-    </nav>
+<header class="huck-page-header">
     <h1>Admin</h1>
 </header>
 

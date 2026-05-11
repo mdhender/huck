@@ -31,12 +31,36 @@ type inviteRowView struct {
 }
 
 // adminInvitesView is the data shape consumed by pages/admin_invites.html.
+// Sidebar/topbar chrome lives on the surrounding AppPage.Shell now, so
+// the page-only view no longer carries the signed-in handle.
 type adminInvitesView struct {
-	Handle    string
 	FormEmail string
 	Error     string
 	Notice    string
 	Rows      []inviteRowView
+}
+
+// invitesShell builds the app-shell context for any /admin/invites
+// render (list, create success, create error). Centralised so the three
+// callsites stay in lockstep on sidebar section, topbar title, and the
+// [Home, Admin, Invites] breadcrumb trail.
+func invitesShell(claims *auth.Claims) ShellView {
+	return ShellView{
+		Sidebar: SidebarView{
+			Handle:  claims.Handle,
+			IsAdmin: claims.Admin,
+			Section: SectionAdminInvites,
+		},
+		Topbar: TopbarView{
+			Handle: claims.Handle,
+			Title:  "Invites",
+		},
+		Crumbs: []Crumb{
+			{Label: "Home", URL: "/"},
+			{Label: "Admin", URL: "/admin"},
+			{Label: "Invites"},
+		},
+	}
 }
 
 // inviteEmailView is the data shape consumed by templates/email/invite.html.
@@ -56,9 +80,9 @@ func (s *Server) handleAdminInvitesList(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.Render(http.StatusOK, "pages/admin_invites.html", adminInvitesView{
-		Handle: claims.Handle,
-		Rows:   rows,
+	return c.Render(http.StatusOK, "pages/admin_invites.html", AppPage{
+		Page:  adminInvitesView{Rows: rows},
+		Shell: invitesShell(claims),
 	})
 }
 
@@ -118,10 +142,12 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.Render(http.StatusOK, "pages/admin_invites.html", adminInvitesView{
-		Handle: claims.Handle,
-		Notice: fmt.Sprintf("Invite sent to %s.", created.Email),
-		Rows:   rows,
+	return c.Render(http.StatusOK, "pages/admin_invites.html", AppPage{
+		Page: adminInvitesView{
+			Notice: fmt.Sprintf("Invite sent to %s.", created.Email),
+			Rows:   rows,
+		},
+		Shell: invitesShell(claims),
 	})
 }
 
@@ -171,11 +197,13 @@ func (s *Server) renderAdminInvitesError(c *echo.Context, claims *auth.Claims, e
 	if err != nil {
 		return err
 	}
-	return c.Render(status, "pages/admin_invites.html", adminInvitesView{
-		Handle:    claims.Handle,
-		FormEmail: email,
-		Error:     msg,
-		Rows:      rows,
+	return c.Render(status, "pages/admin_invites.html", AppPage{
+		Page: adminInvitesView{
+			FormEmail: email,
+			Error:     msg,
+			Rows:      rows,
+		},
+		Shell: invitesShell(claims),
 	})
 }
 

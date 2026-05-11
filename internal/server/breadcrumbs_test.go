@@ -32,7 +32,7 @@ func TestCrumbCurrent(t *testing.T) {
 // templates still see their own view via .Page; shell partials see
 // .Shell.*.
 func TestAppPageWrapping(t *testing.T) {
-	page := adminIndexView{Handle: "alice"}
+	page := homeAuthedView{Handle: "alice"}
 	shell := ShellView{
 		Sidebar: SidebarView{Handle: "alice", IsAdmin: true, Section: SectionAdminInvites},
 		Topbar:  TopbarView{Handle: "alice", Title: "Invites"},
@@ -45,9 +45,9 @@ func TestAppPageWrapping(t *testing.T) {
 
 	wrapped := AppPage{Page: page, Shell: shell}
 
-	gotPage, ok := wrapped.Page.(adminIndexView)
+	gotPage, ok := wrapped.Page.(homeAuthedView)
 	if !ok {
-		t.Fatalf("Page = %T, want adminIndexView", wrapped.Page)
+		t.Fatalf("Page = %T, want homeAuthedView", wrapped.Page)
 	}
 	if gotPage.Handle != "alice" {
 		t.Errorf("Page.Handle = %q, want %q", gotPage.Handle, "alice")

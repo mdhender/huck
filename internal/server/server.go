@@ -147,18 +147,35 @@ type homeAuthedView struct {
 	Handle string
 }
 
-// adminIndexView is the data shape consumed by pages/admin.html.
-type adminIndexView struct {
-	Handle string
-}
+// adminIndexView is the data shape consumed by pages/admin.html. The
+// page body needs no fields — sidebar/topbar chrome lives on the shell —
+// but the named type stays so the renderer's pageLayouts map and the
+// AppPage.Page slot have a typed seam, and so future dashboard widgets
+// have a place to land without touching the wrapping contract.
+type adminIndexView struct{}
 
 // handleAdminIndex is the GET /admin landing — the canonical admin
-// dashboard page. Sprint 3 lands a minimal placeholder here so Sprint 4
-// can wire stable sidebar links without dead-link exceptions.
+// dashboard page. Sprint 4 T4.4 wraps it in the app shell with the
+// [Home, Admin] breadcrumb trail and the admin-dashboard sidebar section.
 func (s *Server) handleAdminIndex(c *echo.Context) error {
 	claims := currentClaims(c)
-	return c.Render(http.StatusOK, "pages/admin.html", adminIndexView{
-		Handle: claims.Handle,
+	return c.Render(http.StatusOK, "pages/admin.html", AppPage{
+		Page: adminIndexView{},
+		Shell: ShellView{
+			Sidebar: SidebarView{
+				Handle:  claims.Handle,
+				IsAdmin: claims.Admin,
+				Section: SectionAdminDashboard,
+			},
+			Topbar: TopbarView{
+				Handle: claims.Handle,
+				Title:  "Admin",
+			},
+			Crumbs: []Crumb{
+				{Label: "Home", URL: "/"},
+				{Label: "Admin"},
+			},
+		},
 	})
 }
 
