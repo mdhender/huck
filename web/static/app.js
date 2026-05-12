@@ -42,3 +42,17 @@
         localize(e.target);
     });
 })();
+
+// Confirm form submissions that opt in via `data-confirm="..."`. CSP-clean
+// replacement for `onsubmit="return confirm(...)"` — inline event handlers
+// are blocked by our `script-src 'self'` policy.
+(function () {
+    document.addEventListener("submit", function (e) {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        const msg = form.dataset.confirm;
+        if (msg && !window.confirm(msg)) {
+            e.preventDefault();
+        }
+    });
+})();
