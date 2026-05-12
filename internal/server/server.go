@@ -255,6 +255,26 @@ func (s *Server) handleLoginSubmit(c *echo.Context) error {
 		return err
 	}
 
+	// Suspension is checked AFTER password verify so a wrong-password
+	// attempt cannot probe whether an account is suspended.
+	if user.IsSuspended() {
+		return c.Render(http.StatusForbidden, "pages/login.html", loginView{
+			Handle: user.Handle,
+			Error:  "This account has been suspended. Contact an administrator.",
+		})
+	}
+
+	// last_login_at is updated only for fully successful logins. A race
+	// where the row disappeared between GetByHandle and RecordLogin would
+	// surface as ErrNotFound; fall through to the generic failure page
+	// rather than 500 the user.
+	if err := s.users.RecordLogin(c.Request().Context(), user.ID); err != nil {
+		if errors.Is(err, users.ErrNotFound) {
+			return s.renderLoginFailure(c, handle)
+		}
+		return err
+	}
+
 	token, err := auth.Issue(user, s.jwtKey, auth.DefaultTokenTTL)
 	if err != nil {
 		return err
