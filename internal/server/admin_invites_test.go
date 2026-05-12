@@ -243,7 +243,9 @@ func TestAdminInvitesCreateMissingEmail(t *testing.T) {
 func TestAdminInvitesCreateDuplicate409(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	if _, err := f.invitesStore.Create(context.Background(), "dup@example.com", f.admin.ID); err != nil {
+	if _, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email: "dup@example.com", InvitedBy: f.admin.ID,
+	}); err != nil {
 		t.Fatalf("seed invite: %v", err)
 	}
 
@@ -289,7 +291,9 @@ func TestAdminInvitesCreateMailgunFailureRollsBack(t *testing.T) {
 func TestAdminInvitesResend(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	inv, err := f.invitesStore.Create(context.Background(), "resend@example.com", f.admin.ID)
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email: "resend@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("seed invite: %v", err)
 	}
@@ -328,7 +332,9 @@ func TestAdminInvitesResend(t *testing.T) {
 func TestAdminInvitesRevoke(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	inv, err := f.invitesStore.Create(context.Background(), "revoke@example.com", f.admin.ID)
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email: "revoke@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("seed invite: %v", err)
 	}
@@ -353,15 +359,21 @@ func TestAdminInvitesRevoke(t *testing.T) {
 		t.Fatalf("status: got %d, want 200", resp.StatusCode)
 	}
 
-	if _, err := f.invitesStore.GetByToken(context.Background(), inv.Token); !errors.Is(err, invites.ErrNotFound) {
-		t.Errorf("after revoke want ErrNotFound, got %v", err)
+	got, err := f.invitesStore.GetByToken(context.Background(), inv.Token)
+	if err != nil {
+		t.Fatalf("after revoke GetByToken: %v", err)
+	}
+	if !got.Revoked() {
+		t.Errorf("after revoke want revoked_at set, got %+v", got)
 	}
 }
 
 func TestAdminInvitesRevokeNonAdminForbidden(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
-	inv, err := f.invitesStore.Create(context.Background(), "guarded@example.com", f.admin.ID)
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email: "guarded@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("seed invite: %v", err)
 	}

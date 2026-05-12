@@ -107,7 +107,10 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 		end := sqlitex.Transaction(conn)
 		defer end(&txErr)
 
-		inv, err := s.invites.CreateOnConn(conn, email, claims.UserID())
+		inv, err := s.invites.CreateOnConn(conn, invites.NewInvite{
+			Email:     email,
+			InvitedBy: claims.UserID(),
+		})
 		if err != nil {
 			return err
 		}

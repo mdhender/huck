@@ -111,7 +111,10 @@ func TestCreateAndGet(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	got, err := f.store.Create(ctx, "  NewUser@Example.COM ", f.admin.ID)
+	got, err := f.store.Create(ctx, invites.NewInvite{
+		Email:     "  NewUser@Example.COM ",
+		InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -124,8 +127,14 @@ func TestCreateAndGet(t *testing.T) {
 	if got.InvitedBy != f.admin.ID {
 		t.Errorf("InvitedBy = %d, want %d", got.InvitedBy, f.admin.ID)
 	}
+	if got.IsAdmin {
+		t.Error("default invite should not be admin")
+	}
 	if got.Consumed() {
 		t.Error("freshly created invite should not be consumed")
+	}
+	if got.Revoked() {
+		t.Error("freshly created invite should not be revoked")
 	}
 	want := got.CreatedAt.Add(7 * 24 * time.Hour)
 	if delta := got.ExpiresAt.Sub(want); delta < -time.Second || delta > time.Second {
@@ -136,15 +145,42 @@ func TestCreateAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByToken: %v", err)
 	}
-	if round.Token != got.Token || round.Email != got.Email {
+	if round.Token != got.Token || round.Email != got.Email || round.IsAdmin != got.IsAdmin {
 		t.Errorf("round trip mismatch: %+v vs %+v", round, got)
+	}
+}
+
+func TestCreateAdminRoundTrip(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := context.Background()
+
+	got, err := f.store.Create(ctx, invites.NewInvite{
+		Email:     "boss@example.com",
+		InvitedBy: f.admin.ID,
+		IsAdmin:   true,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !got.IsAdmin {
+		t.Error("Create returned IsAdmin = false for an admin invite")
+	}
+	round, err := f.store.GetByToken(ctx, got.Token)
+	if err != nil {
+		t.Fatalf("GetByToken: %v", err)
+	}
+	if !round.IsAdmin {
+		t.Errorf("round-tripped invite lost IsAdmin: %+v", round)
 	}
 }
 
 func TestCreateRequiresEmail(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	if _, err := f.store.Create(context.Background(), "   ", f.admin.ID); err == nil {
+	if _, err := f.store.Create(context.Background(), invites.NewInvite{
+		Email: "   ", InvitedBy: f.admin.ID,
+	}); err == nil {
 		t.Fatal("expected error for empty email")
 	}
 }
@@ -152,7 +188,9 @@ func TestCreateRequiresEmail(t *testing.T) {
 func TestCreateRequiresInvitedBy(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	if _, err := f.store.Create(context.Background(), "x@example.com", 0); err == nil {
+	if _, err := f.store.Create(context.Background(), invites.NewInvite{
+		Email: "x@example.com",
+	}); err == nil {
 		t.Fatal("expected error for zero invitedBy")
 	}
 }
@@ -162,28 +200,39 @@ func TestCreateDuplicateActive(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	if _, err := f.store.Create(ctx, "dup@example.com", f.admin.ID); err != nil {
+	if _, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "dup@example.com", InvitedBy: f.admin.ID,
+	}); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
-	_, err := f.store.Create(ctx, "DUP@example.com", f.admin.ID)
+	_, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "DUP@example.com", InvitedBy: f.admin.ID,
+	})
 	if !errors.Is(err, invites.ErrEmailAlreadyInvited) {
 		t.Fatalf("want ErrEmailAlreadyInvited, got %v", err)
 	}
 }
 
+// TestCreateAfterRevoke pins the partial-index predicate: the index now
+// excludes both consumed and revoked rows, so a fresh Create for the
+// same email must succeed after Revoke (sprint-5 T2.1 + T2.2).
 func TestCreateAfterRevoke(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 
-	first, err := f.store.Create(ctx, "again@example.com", f.admin.ID)
+	first, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "again@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
 	if err := f.store.Revoke(ctx, first.Token); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
-	if _, err := f.store.Create(ctx, "again@example.com", f.admin.ID); err != nil {
+	if _, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "again@example.com", InvitedBy: f.admin.ID,
+	}); err != nil {
 		t.Fatalf("second Create after Revoke: %v", err)
 	}
 }
@@ -193,7 +242,9 @@ func TestCreateAfterConsume(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	first, err := f.store.Create(ctx, "again@example.com", f.admin.ID)
+	first, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "again@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
@@ -208,7 +259,9 @@ func TestCreateAfterConsume(t *testing.T) {
 	}
 	f.pool.Put(conn)
 
-	if _, err := f.store.Create(ctx, "again@example.com", f.admin.ID); err != nil {
+	if _, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "again@example.com", InvitedBy: f.admin.ID,
+	}); err != nil {
 		t.Fatalf("second Create after Consume: %v", err)
 	}
 }
@@ -227,7 +280,9 @@ func TestResendRefreshesExpiry(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	inv, err := f.store.Create(ctx, "re@example.com", f.admin.ID)
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "re@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -251,7 +306,9 @@ func TestResendConsumed(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	inv, err := f.store.Create(ctx, "rc@example.com", f.admin.ID)
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "rc@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -270,6 +327,25 @@ func TestResendConsumed(t *testing.T) {
 	}
 }
 
+func TestResendRevoked(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := context.Background()
+
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "rvres@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := f.store.Revoke(ctx, inv.Token); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if _, err := f.store.Resend(ctx, inv.Token); !errors.Is(err, invites.ErrRevoked) {
+		t.Fatalf("want ErrRevoked, got %v", err)
+	}
+}
+
 func TestResendNotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -278,23 +354,86 @@ func TestResendNotFound(t *testing.T) {
 	}
 }
 
+// TestRevoke covers the soft-revoke contract: the row stays in the
+// table with revoked_at set, GetByToken still returns it, and a second
+// Revoke is idempotent at the caller surface (returns ErrNotFound).
 func TestRevoke(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 
-	inv, err := f.store.Create(ctx, "rv@example.com", f.admin.ID)
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "rv@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if err := f.store.Revoke(ctx, inv.Token); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
-	if _, err := f.store.GetByToken(ctx, inv.Token); !errors.Is(err, invites.ErrNotFound) {
-		t.Fatalf("after Revoke, GetByToken want ErrNotFound, got %v", err)
+	got, err := f.store.GetByToken(ctx, inv.Token)
+	if err != nil {
+		t.Fatalf("after Revoke, GetByToken: %v", err)
+	}
+	if !got.Revoked() {
+		t.Errorf("expected revoked_at to be set, got %+v", got)
 	}
 	if err := f.store.Revoke(ctx, inv.Token); !errors.Is(err, invites.ErrNotFound) {
 		t.Fatalf("second Revoke want ErrNotFound, got %v", err)
+	}
+}
+
+func TestStatus(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		inv  invites.Invite
+		want string
+	}{
+		{
+			name: "pending",
+			inv: invites.Invite{
+				CreatedAt: now.Add(-time.Hour),
+				ExpiresAt: now.Add(time.Hour),
+			},
+			want: invites.StatusPending,
+		},
+		{
+			name: "accepted",
+			inv: invites.Invite{
+				CreatedAt:  now.Add(-time.Hour),
+				ExpiresAt:  now.Add(time.Hour),
+				ConsumedAt: now.Add(-30 * time.Minute),
+			},
+			want: invites.StatusAccepted,
+		},
+		{
+			name: "expired",
+			inv: invites.Invite{
+				CreatedAt: now.Add(-2 * time.Hour),
+				ExpiresAt: now.Add(-time.Hour),
+			},
+			want: invites.StatusExpired,
+		},
+		{
+			name: "revoked wins over consumed",
+			inv: invites.Invite{
+				CreatedAt:  now.Add(-time.Hour),
+				ExpiresAt:  now.Add(time.Hour),
+				ConsumedAt: now.Add(-30 * time.Minute),
+				RevokedAt:  now.Add(-15 * time.Minute),
+			},
+			want: invites.StatusRevoked,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.inv.Status(now); got != tc.want {
+				t.Errorf("Status = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -303,7 +442,9 @@ func TestConsume(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	inv, err := f.store.Create(ctx, "cn@example.com", f.admin.ID)
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "cn@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -334,7 +475,9 @@ func TestConsumeExpired(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	inv, err := f.store.Create(ctx, "ex@example.com", f.admin.ID)
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "ex@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -347,6 +490,31 @@ func TestConsumeExpired(t *testing.T) {
 	defer f.pool.Put(conn)
 	if err := f.store.Consume(ctx, conn, inv.Token); !errors.Is(err, invites.ErrExpired) {
 		t.Fatalf("want ErrExpired, got %v", err)
+	}
+}
+
+func TestConsumeRevoked(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := context.Background()
+
+	inv, err := f.store.Create(ctx, invites.NewInvite{
+		Email: "cnrev@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := f.store.Revoke(ctx, inv.Token); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	conn, err := f.pool.Take(ctx)
+	if err != nil {
+		t.Fatalf("pool.Take: %v", err)
+	}
+	defer f.pool.Put(conn)
+	if err := f.store.Consume(ctx, conn, inv.Token); !errors.Is(err, invites.ErrRevoked) {
+		t.Fatalf("want ErrRevoked, got %v", err)
 	}
 }
 
@@ -373,7 +541,9 @@ func TestConsumeCancelled(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
-	inv, err := f.store.Create(context.Background(), "cn@example.com", f.admin.ID)
+	inv, err := f.store.Create(context.Background(), invites.NewInvite{
+		Email: "cn@example.com", InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

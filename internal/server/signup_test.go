@@ -89,7 +89,10 @@ func newSignupFixture(t *testing.T) *signupFixture {
 // (skipping the admin HTTP path, which T6 will add).
 func (f *signupFixture) createInvite(t *testing.T, email string) invites.Invite {
 	t.Helper()
-	inv, err := f.invitesStore.Create(context.Background(), email, f.admin.ID)
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email:     email,
+		InvitedBy: f.admin.ID,
+	})
 	if err != nil {
 		t.Fatalf("invitesStore.Create: %v", err)
 	}

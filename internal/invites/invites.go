@@ -29,7 +29,17 @@ var (
 	ErrNotFound            = errors.New("invite not found")
 	ErrExpired             = errors.New("invite expired")
 	ErrConsumed            = errors.New("invite already consumed")
+	ErrRevoked             = errors.New("invite has been revoked")
 	ErrEmailAlreadyInvited = errors.New("email already has an active invite")
+)
+
+// Status values returned by Invite.Status. Exported as constants so
+// templates and tests share the same vocabulary.
+const (
+	StatusPending  = "Pending"
+	StatusAccepted = "Accepted"
+	StatusExpired  = "Expired"
+	StatusRevoked  = "Revoked"
 )
 
 // Invite is the row shape consumed by handlers.
@@ -37,17 +47,47 @@ type Invite struct {
 	Token      Token
 	Email      string
 	InvitedBy  int64
+	IsAdmin    bool
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	ConsumedAt time.Time // zero value when the invite has not been consumed
+	RevokedAt  time.Time // zero value when the invite has not been revoked
 }
 
 // Consumed reports whether the invite has been used.
 func (i Invite) Consumed() bool { return !i.ConsumedAt.IsZero() }
 
+// Revoked reports whether the invite carries a non-zero revoked_at.
+func (i Invite) Revoked() bool { return !i.RevokedAt.IsZero() }
+
 // Expired reports whether the invite's expires_at is in the past
 // relative to now. Callers usually pass time.Now().UTC().
 func (i Invite) Expired(now time.Time) bool { return now.After(i.ExpiresAt) }
+
+// Status derives the display status used by the admin invites page and
+// the per-row partial. Precedence (highest first): Revoked, Accepted
+// (consumed), Expired, Pending. See sprint-5 T2.2.
+func (i Invite) Status(now time.Time) string {
+	switch {
+	case i.Revoked():
+		return StatusRevoked
+	case i.Consumed():
+		return StatusAccepted
+	case i.Expired(now):
+		return StatusExpired
+	default:
+		return StatusPending
+	}
+}
+
+// NewInvite is the input to Create / CreateOnConn. IsAdmin records the
+// role the invite will grant on signup; the signup flow reads this off
+// the row rather than trusting the submitted form (DESIGN.md §9).
+type NewInvite struct {
+	Email     string
+	InvitedBy int64
+	IsAdmin   bool
+}
 
 // Store is a CRUD facade over the invites table.
 type Store struct {
@@ -57,30 +97,30 @@ type Store struct {
 // NewStore returns a Store backed by the given pool.
 func NewStore(pool *sqlitex.Pool) *Store { return &Store{pool: pool} }
 
-// Create generates a token and inserts a new invite for email. The email
-// is lowercased before insert. If an active (unconsumed) invite already
-// exists for the same address, the partial unique index fires and Create
-// returns ErrEmailAlreadyInvited so the admin endpoint can map it to
-// HTTP 409 (DESIGN.md §9 step 1).
-func (s *Store) Create(ctx context.Context, email string, invitedBy int64) (Invite, error) {
+// Create generates a token and inserts a new invite. The email is
+// lowercased before insert. If an active (unconsumed, non-revoked)
+// invite already exists for the same address, the partial unique index
+// fires and Create returns ErrEmailAlreadyInvited so the admin endpoint
+// can map it to HTTP 409 (DESIGN.md §9 step 1).
+func (s *Store) Create(ctx context.Context, in NewInvite) (Invite, error) {
 	conn, err := s.pool.Take(ctx)
 	if err != nil {
 		return Invite{}, err
 	}
 	defer s.pool.Put(conn)
-	return s.CreateOnConn(conn, email, invitedBy)
+	return s.CreateOnConn(conn, in)
 }
 
 // CreateOnConn is the connection-scoped sibling of Create. The admin
 // invite handler runs Create + Mailgun Send inside one
 // sqlitex.Transaction so that a Mailgun failure rolls the row back; the
 // caller owns the transaction boundary on conn.
-func (s *Store) CreateOnConn(conn *sqlite.Conn, email string, invitedBy int64) (Invite, error) {
-	email = users.Normalise(email)
-	if email == "" {
+func (s *Store) CreateOnConn(conn *sqlite.Conn, in NewInvite) (Invite, error) {
+	in.Email = users.Normalise(in.Email)
+	if in.Email == "" {
 		return Invite{}, errors.New("invites: email is required")
 	}
-	if invitedBy <= 0 {
+	if in.InvitedBy <= 0 {
 		return Invite{}, errors.New("invites: invitedBy must be a valid user id")
 	}
 
@@ -92,25 +132,27 @@ func (s *Store) CreateOnConn(conn *sqlite.Conn, email string, invitedBy int64) (
 	now := time.Now().UTC()
 	expires := now.Add(ttl)
 	err = sqlitex.Execute(conn, `
-		INSERT INTO invites (token, email, invited_by, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?);`,
+		INSERT INTO invites (token, email, invited_by, is_admin, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?);`,
 		&sqlitex.ExecOptions{
 			Args: []any{
 				tok.String(),
-				email,
-				invitedBy,
+				in.Email,
+				in.InvitedBy,
+				boolToInt(in.IsAdmin),
 				now.Format(time.RFC3339Nano),
 				expires.Format(time.RFC3339Nano),
 			},
 		})
 	if err != nil {
-		return Invite{}, classifyInsertErr(conn, email, err)
+		return Invite{}, classifyInsertErr(conn, in.Email, err)
 	}
 
 	return Invite{
 		Token:     tok,
-		Email:     email,
-		InvitedBy: invitedBy,
+		Email:     in.Email,
+		InvitedBy: in.InvitedBy,
+		IsAdmin:   in.IsAdmin,
 		CreatedAt: now,
 		ExpiresAt: expires,
 	}, nil
@@ -127,7 +169,7 @@ func (s *Store) ListAll(ctx context.Context) ([]Invite, error) {
 
 	var out []Invite
 	err = sqlitex.Execute(conn,
-		`SELECT token, email, invited_by, created_at, expires_at, consumed_at
+		`SELECT token, email, invited_by, is_admin, created_at, expires_at, consumed_at, revoked_at
 		   FROM invites ORDER BY created_at DESC;`,
 		&sqlitex.ExecOptions{
 			ResultFunc: func(stmt *sqlite.Stmt) error {
@@ -135,11 +177,15 @@ func (s *Store) ListAll(ctx context.Context) ([]Invite, error) {
 					Token:     Token(stmt.ColumnText(0)),
 					Email:     stmt.ColumnText(1),
 					InvitedBy: stmt.ColumnInt64(2),
-					CreatedAt: parseTime(stmt.ColumnText(3)),
-					ExpiresAt: parseTime(stmt.ColumnText(4)),
+					IsAdmin:   stmt.ColumnInt(3) != 0,
+					CreatedAt: parseTime(stmt.ColumnText(4)),
+					ExpiresAt: parseTime(stmt.ColumnText(5)),
 				}
-				if stmt.ColumnType(5) != sqlite.TypeNull {
-					inv.ConsumedAt = parseTime(stmt.ColumnText(5))
+				if stmt.ColumnType(6) != sqlite.TypeNull {
+					inv.ConsumedAt = parseTime(stmt.ColumnText(6))
+				}
+				if stmt.ColumnType(7) != sqlite.TypeNull {
+					inv.RevokedAt = parseTime(stmt.ColumnText(7))
 				}
 				out = append(out, inv)
 				return nil
@@ -171,9 +217,10 @@ func (s *Store) GetByTokenOnConn(conn *sqlite.Conn, t Token) (Invite, error) {
 }
 
 // Resend refreshes an existing invite's expires_at to now+7d and returns
-// the updated row. Resend rejects consumed invites with ErrConsumed; an
-// expired-but-not-consumed invite is allowed (DESIGN.md §9 step 2 says
-// resend is permitted "regardless of prior expiry").
+// the updated row. Resend rejects consumed invites with ErrConsumed and
+// revoked invites with ErrRevoked; an expired-but-not-consumed invite
+// is allowed (DESIGN.md §9 step 2 says resend is permitted "regardless
+// of prior expiry").
 func (s *Store) Resend(ctx context.Context, t Token) (Invite, error) {
 	conn, err := s.pool.Take(ctx)
 	if err != nil {
@@ -184,6 +231,9 @@ func (s *Store) Resend(ctx context.Context, t Token) (Invite, error) {
 	inv, err := getByToken(conn, t)
 	if err != nil {
 		return Invite{}, err
+	}
+	if inv.Revoked() {
+		return Invite{}, ErrRevoked
 	}
 	if inv.Consumed() {
 		return Invite{}, ErrConsumed
@@ -203,7 +253,11 @@ func (s *Store) Resend(ctx context.Context, t Token) (Invite, error) {
 	return inv, nil
 }
 
-// Revoke deletes the invite row. Returns ErrNotFound when no row matches.
+// Revoke soft-deletes the invite by stamping revoked_at. The row stays
+// for audit; the partial unique index excludes revoked rows so a fresh
+// Create for the same email succeeds afterwards. Returns ErrNotFound
+// when no row matches or the row is already revoked (idempotent at the
+// caller surface).
 func (s *Store) Revoke(ctx context.Context, t Token) error {
 	conn, err := s.pool.Take(ctx)
 	if err != nil {
@@ -211,9 +265,10 @@ func (s *Store) Revoke(ctx context.Context, t Token) error {
 	}
 	defer s.pool.Put(conn)
 
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if err := sqlitex.Execute(conn,
-		`DELETE FROM invites WHERE token = ?;`,
-		&sqlitex.ExecOptions{Args: []any{t.String()}}); err != nil {
+		`UPDATE invites SET revoked_at = ? WHERE token = ? AND revoked_at IS NULL;`,
+		&sqlitex.ExecOptions{Args: []any{now, t.String()}}); err != nil {
 		return fmt.Errorf("invites: revoke: %w", err)
 	}
 	if conn.Changes() == 0 {
@@ -236,8 +291,8 @@ func (s *Store) Revoke(ctx context.Context, t Token) error {
 //     pool.Take(reqCtx) and pass the same reqCtx here get cancellation
 //     for free.
 //
-// Returns ErrNotFound, ErrExpired, or ErrConsumed if the invite is in
-// any state other than active.
+// Returns ErrNotFound, ErrExpired, ErrConsumed, or ErrRevoked if the
+// invite is in any state other than active.
 func (s *Store) Consume(ctx context.Context, conn *sqlite.Conn, t Token) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -245,6 +300,9 @@ func (s *Store) Consume(ctx context.Context, conn *sqlite.Conn, t Token) error {
 	inv, err := getByToken(conn, t)
 	if err != nil {
 		return err
+	}
+	if inv.Revoked() {
+		return ErrRevoked
 	}
 	if inv.Consumed() {
 		return ErrConsumed
@@ -276,7 +334,7 @@ func getByToken(conn *sqlite.Conn, t Token) (Invite, error) {
 		found bool
 	)
 	err := sqlitex.Execute(conn,
-		`SELECT token, email, invited_by, created_at, expires_at, consumed_at
+		`SELECT token, email, invited_by, is_admin, created_at, expires_at, consumed_at, revoked_at
 		   FROM invites WHERE token = ?;`,
 		&sqlitex.ExecOptions{
 			Args: []any{t.String()},
@@ -285,10 +343,14 @@ func getByToken(conn *sqlite.Conn, t Token) (Invite, error) {
 				inv.Token = Token(stmt.ColumnText(0))
 				inv.Email = stmt.ColumnText(1)
 				inv.InvitedBy = stmt.ColumnInt64(2)
-				inv.CreatedAt = parseTime(stmt.ColumnText(3))
-				inv.ExpiresAt = parseTime(stmt.ColumnText(4))
-				if stmt.ColumnType(5) != sqlite.TypeNull {
-					inv.ConsumedAt = parseTime(stmt.ColumnText(5))
+				inv.IsAdmin = stmt.ColumnInt(3) != 0
+				inv.CreatedAt = parseTime(stmt.ColumnText(4))
+				inv.ExpiresAt = parseTime(stmt.ColumnText(5))
+				if stmt.ColumnType(6) != sqlite.TypeNull {
+					inv.ConsumedAt = parseTime(stmt.ColumnText(6))
+				}
+				if stmt.ColumnType(7) != sqlite.TypeNull {
+					inv.RevokedAt = parseTime(stmt.ColumnText(7))
 				}
 				return nil
 			},
@@ -307,18 +369,26 @@ func parseTime(s string) time.Time {
 	return t
 }
 
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // classifyInsertErr maps the SQLite UNIQUE failure on the
 // invites_email_active partial index to ErrEmailAlreadyInvited.
 //
 // On SQLITE_CONSTRAINT_UNIQUE we confirm the conflict by querying for
-// an active (unconsumed) invite at the same email on the caller's
-// connection, rather than parsing the driver's error text. The
+// an active (unconsumed, non-revoked) invite at the same email on the
+// caller's connection, rather than parsing the driver's error text. The
 // previous strings.Contains check was silently coupled to SQLite's
 // "UNIQUE constraint failed: invites.email" wording and to the column
 // name; the SELECT is cheap, survives both wording drift and a column
 // rename, and runs inside whatever transaction the caller has open on
-// conn. Any other constraint or driver error is wrapped and returned
-// as-is.
+// conn. The predicate mirrors the partial index (sprint-5 T2.2) so a
+// revoke-then-recreate cycle is not misclassified. Any other constraint
+// or driver error is wrapped and returned as-is.
 func classifyInsertErr(conn *sqlite.Conn, email string, err error) error {
 	if sqlite.ErrCode(err) != sqlite.ResultConstraintUnique {
 		return fmt.Errorf("invites: insert: %w", err)
@@ -336,7 +406,8 @@ func classifyInsertErr(conn *sqlite.Conn, email string, err error) error {
 func activeInviteExists(conn *sqlite.Conn, email string) (bool, error) {
 	var found bool
 	err := sqlitex.Execute(conn,
-		`SELECT 1 FROM invites WHERE email = ? AND consumed_at IS NULL;`,
+		`SELECT 1 FROM invites
+		   WHERE email = ? AND consumed_at IS NULL AND revoked_at IS NULL;`,
 		&sqlitex.ExecOptions{
 			Args: []any{email},
 			ResultFunc: func(stmt *sqlite.Stmt) error {
