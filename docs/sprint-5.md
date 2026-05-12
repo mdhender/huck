@@ -150,7 +150,7 @@ here so reviewers don't re-litigate them mid-sprint.
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
-| T1.1 | TODO   |        |       |
+| T1.1 | DONE   |        | Migration applied; second `db migrate` is a no-op; schema_migrations holds versions 1 and 2. |
 | T1.2 | TODO   |        |       |
 | T2.1 | TODO   |        |       |
 | T2.2 | TODO   |        |       |
