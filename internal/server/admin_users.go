@@ -18,6 +18,10 @@ type userRowView struct {
 	Email        string
 	IsAdmin      bool
 	IsSelf       bool
+	Role         string
+	Status       string
+	LastLogin    string
+	LastLoginISO string
 	CreatedAt    string
 	CreatedAtISO string
 }
@@ -124,12 +128,28 @@ func (s *Server) handleAdminUsersList(c *echo.Context) error {
 	rows := make([]userRowView, 0, len(all))
 	for _, u := range all {
 		createdAt, createdAtISO := fmtUTC(u.CreatedAt)
+		role := "User"
+		if u.IsAdmin {
+			role = "Admin"
+		}
+		status := "Active"
+		if u.IsSuspended() {
+			status = "Suspended"
+		}
+		var lastLogin, lastLoginISO string
+		if !u.LastLoginAt.IsZero() {
+			lastLogin, lastLoginISO = fmtUTC(u.LastLoginAt)
+		}
 		rows = append(rows, userRowView{
 			ID:           u.ID,
 			Handle:       u.Handle,
 			Email:        u.Email,
 			IsAdmin:      u.IsAdmin,
 			IsSelf:       u.ID == claims.UserID(),
+			Role:         role,
+			Status:       status,
+			LastLogin:    lastLogin,
+			LastLoginISO: lastLoginISO,
 			CreatedAt:    createdAt,
 			CreatedAtISO: createdAtISO,
 		})

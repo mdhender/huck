@@ -14,9 +14,11 @@
         <table>
             <thead>
                 <tr>
-                    <th scope="col">Handle</th>
+                    <th scope="col">Name</th>
                     <th scope="col">Email</th>
-                    <th scope="col">Admin</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Last login</th>
                     <th scope="col">Created</th>
                     <th scope="col">Actions</th>
                 </tr>
@@ -26,7 +28,9 @@
                     <tr>
                         <td>{{ .Handle }}{{ if .IsSelf }} <small>(you)</small>{{ end }}</td>
                         <td>{{ .Email }}</td>
-                        <td>{{ if .IsAdmin }}yes{{ else }}no{{ end }}</td>
+                        <td>{{ .Role }}</td>
+                        <td>{{ .Status }}</td>
+                        <td>{{ if .LastLoginISO }}<time datetime="{{ .LastLoginISO }}">{{ .LastLogin }}</time>{{ else }}—{{ end }}</td>
                         <td><time datetime="{{ .CreatedAtISO }}">{{ .CreatedAt }}</time></td>
                         <td>
                             <a href="/admin/users/{{ .ID }}" role="button" class="secondary">View</a>
