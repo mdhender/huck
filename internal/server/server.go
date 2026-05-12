@@ -340,6 +340,9 @@ func (s *Server) handleSignupForm(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if inv.Revoked() {
+		return invites.ErrRevoked
+	}
 	if inv.Consumed() {
 		return invites.ErrConsumed
 	}
@@ -381,6 +384,9 @@ func (s *Server) handleSignupSubmit(c *echo.Context) error {
 		if err != nil {
 			return err
 		}
+		if inv.Revoked() {
+			return invites.ErrRevoked
+		}
 		if inv.Consumed() {
 			return invites.ErrConsumed
 		}
@@ -404,7 +410,7 @@ func (s *Server) handleSignupSubmit(c *echo.Context) error {
 			Handle:       handle,
 			Email:        inv.Email,
 			PasswordHash: hash,
-			IsAdmin:      false,
+			IsAdmin:      inv.IsAdmin,
 		})
 		if err != nil {
 			return err
@@ -442,7 +448,8 @@ func (s *Server) renderSignupFailure(c *echo.Context, token, email, handle strin
 	switch {
 	case errors.Is(err, invites.ErrNotFound),
 		errors.Is(err, invites.ErrExpired),
-		errors.Is(err, invites.ErrConsumed):
+		errors.Is(err, invites.ErrConsumed),
+		errors.Is(err, invites.ErrRevoked):
 		return err
 	}
 

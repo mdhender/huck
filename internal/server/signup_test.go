@@ -99,6 +99,29 @@ func (f *signupFixture) createInvite(t *testing.T, email string) invites.Invite 
 	return inv
 }
 
+// createAdminInvite issues an admin invite (IsAdmin = true).
+func (f *signupFixture) createAdminInvite(t *testing.T, email string) invites.Invite {
+	t.Helper()
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email:     email,
+		InvitedBy: f.admin.ID,
+		IsAdmin:   true,
+	})
+	if err != nil {
+		t.Fatalf("invitesStore.Create: %v", err)
+	}
+	return inv
+}
+
+// markRevoked soft-revokes a token via the store so revoked-invite
+// branches can be exercised end-to-end.
+func (f *signupFixture) markRevoked(t *testing.T, tok invites.Token) {
+	t.Helper()
+	if err := f.invitesStore.Revoke(context.Background(), tok); err != nil {
+		t.Fatalf("invitesStore.Revoke: %v", err)
+	}
+}
+
 // backdateExpiry rewrites the stored expires_at for a token to the past
 // so the "expired" branches can be exercised without sleeping.
 func (f *signupFixture) backdateExpiry(t *testing.T, tok invites.Token) {
@@ -422,5 +445,99 @@ func TestSignupParallelSubmits(t *testing.T) {
 	}
 	if successes != 1 || failures != 1 {
 		t.Fatalf("want 1 success + 1 failure, got %d/%d", successes, failures)
+	}
+}
+
+func TestSignupGetRevokedToken(t *testing.T) {
+	t.Parallel()
+	f := newSignupFixture(t)
+	inv := f.createInvite(t, "revoked@example.com")
+	f.markRevoked(t, inv.Token)
+
+	client := f.signupClient(t)
+	resp, err := client.Get(f.ts.URL + "/signup/" + inv.Token.String())
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusGone {
+		t.Errorf("status: got %d, want 410 (Gone)", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "revoked") {
+		t.Errorf("expected revoked message, got: %s", trim(string(body)))
+	}
+}
+
+func TestSignupSubmitRevokedToken(t *testing.T) {
+	t.Parallel()
+	f := newSignupFixture(t)
+	inv := f.createInvite(t, "revoke-post@example.com")
+
+	client := f.signupClient(t)
+	// GET first so the form renders, mirroring a user who left the page
+	// open while an admin revoked the invite.
+	mustGet(t, client, f.ts.URL+"/signup/"+inv.Token.String(), http.StatusOK)
+
+	f.markRevoked(t, inv.Token)
+
+	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
+		"email":    {"revoke-post@example.com"},
+		"handle":   {"latejoin"},
+		"password": {"correcthorsebattery"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusGone {
+		t.Fatalf("status: got %d, want 410 (Gone)", resp.StatusCode)
+	}
+}
+
+func TestSignupAdminInviteCreatesAdminUser(t *testing.T) {
+	t.Parallel()
+	f := newSignupFixture(t)
+	inv := f.createAdminInvite(t, "newadmin@example.com")
+
+	client := f.signupClient(t)
+	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
+		"email":    {"newadmin@example.com"},
+		"handle":   {"newadmin"},
+		"password": {"correcthorsebattery"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status: got %d, want 303", resp.StatusCode)
+	}
+
+	u, err := f.usersStore.GetByHandle(context.Background(), "newadmin")
+	if err != nil {
+		t.Fatalf("GetByHandle: %v", err)
+	}
+	if !u.IsAdmin {
+		t.Error("signup against an admin invite should produce IsAdmin = true")
+	}
+}
+
+func TestSignupRegularInviteCreatesRegularUser(t *testing.T) {
+	t.Parallel()
+	f := newSignupFixture(t)
+	inv := f.createInvite(t, "regular@example.com")
+
+	client := f.signupClient(t)
+	resp := mustPost(t, client, f.ts.URL+"/signup/"+inv.Token.String(), url.Values{
+		"email":    {"regular@example.com"},
+		"handle":   {"regularjoe"},
+		"password": {"correcthorsebattery"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status: got %d, want 303", resp.StatusCode)
+	}
+
+	u, err := f.usersStore.GetByHandle(context.Background(), "regularjoe")
+	if err != nil {
+		t.Fatalf("GetByHandle: %v", err)
+	}
+	if u.IsAdmin {
+		t.Error("signup against a regular invite should produce IsAdmin = false")
 	}
 }

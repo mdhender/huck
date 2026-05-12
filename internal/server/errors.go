@@ -45,6 +45,9 @@ func (s *Server) installErrorHandler() {
 		case errors.Is(err, invites.ErrConsumed):
 			status = http.StatusGone
 			message = "This invite has already been used."
+		case errors.Is(err, invites.ErrRevoked):
+			status = http.StatusGone
+			message = "This invitation has been revoked."
 		case errors.As(err, &he):
 			status = he.Code
 			if he.Message != "" {
