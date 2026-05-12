@@ -152,7 +152,7 @@ here so reviewers don't re-litigate them mid-sprint.
 |------|--------|--------|-------|
 | T1.1 | DONE   |        | Migration applied; second `db migrate` is a no-op; schema_migrations holds versions 1 and 2. |
 | T1.2 | DONE   |        | Added `LastLoginAt`/`SuspendedAt` + `IsSuspended()`; new `RecordLogin`/`Suspend`/`Reactivate`; removed `Store.Delete`. Suspend uses an existence pre-check so an idempotent re-suspend still returns nil while a missing id returns `ErrNotFound`. Verified with narrower scope (`go build/vet/test ./internal/users/...`) — full-tree build break in `internal/server/admin_users.go:242` (`s.users.Delete`) and the matching `account_test.go` caller is the intentional signal called out in this task; T4.2 removes the handler+route. |
-| T2.1 | TODO   |        |       |
+| T2.1 | DONE   |        | Migration adds `revoked_at` + `is_admin`; rebuilds `invites_email_active` to predicate on `consumed_at IS NULL AND revoked_at IS NULL`. Verified `db.Create` + second `db.Migrate` is a no-op with `schema_migrations` holding versions 1, 2, 3. Narrower verification scope (`internal/db/...`) because the full-tree build is still broken at `internal/server/admin_users.go:242` (`s.users.Delete`) — the intentional signal called out in T1.2 that T4.2 will remove. |
 | T2.2 | TODO   |        |       |
 | T3.1 | TODO   |        |       |
 | T3.2 | TODO   |        |       |
