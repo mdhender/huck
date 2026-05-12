@@ -30,7 +30,13 @@ type User struct {
 	IsAdmin      bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	LastLoginAt  time.Time
+	SuspendedAt  time.Time
 }
+
+// IsSuspended reports whether the user row carries a non-zero
+// suspended_at. Suspended users cannot get a new JWT (see Sprint 5 T3.1).
+func (u User) IsSuspended() bool { return !u.SuspendedAt.IsZero() }
 
 // NewUser is the input to Create.
 type NewUser struct {
@@ -87,20 +93,20 @@ func (s *Store) CreateOnConn(conn *sqlite.Conn, in NewUser) (User, error) {
 	}
 
 	return getOneOnConn(conn,
-		`SELECT id, handle, email, password_hash, is_admin, created_at, updated_at
+		`SELECT id, handle, email, password_hash, is_admin, created_at, updated_at, last_login_at, suspended_at
 		   FROM users WHERE id = ?;`, conn.LastInsertRowID())
 }
 
 // GetByHandle looks up a user by handle. The lookup lowercases the input
 // to mirror what is stored.
 func (s *Store) GetByHandle(ctx context.Context, handle string) (User, error) {
-	return s.getOne(ctx, `SELECT id, handle, email, password_hash, is_admin, created_at, updated_at
+	return s.getOne(ctx, `SELECT id, handle, email, password_hash, is_admin, created_at, updated_at, last_login_at, suspended_at
 		FROM users WHERE handle = ?;`, Normalise(handle))
 }
 
 // GetByID looks up a user by primary key.
 func (s *Store) GetByID(ctx context.Context, id int64) (User, error) {
-	return s.getOne(ctx, `SELECT id, handle, email, password_hash, is_admin, created_at, updated_at
+	return s.getOne(ctx, `SELECT id, handle, email, password_hash, is_admin, created_at, updated_at, last_login_at, suspended_at
 		FROM users WHERE id = ?;`, id)
 }
 
@@ -115,7 +121,7 @@ func (s *Store) ListAll(ctx context.Context) ([]User, error) {
 
 	var out []User
 	err = sqlitex.Execute(conn,
-		`SELECT id, handle, email, password_hash, is_admin, created_at, updated_at
+		`SELECT id, handle, email, password_hash, is_admin, created_at, updated_at, last_login_at, suspended_at
 		   FROM users ORDER BY created_at DESC;`,
 		&sqlitex.ExecOptions{
 			ResultFunc: func(stmt *sqlite.Stmt) error {
@@ -127,6 +133,8 @@ func (s *Store) ListAll(ctx context.Context) ([]User, error) {
 					IsAdmin:      stmt.ColumnInt64(4) != 0,
 					CreatedAt:    parseTime(stmt.ColumnText(5)),
 					UpdatedAt:    parseTime(stmt.ColumnText(6)),
+					LastLoginAt:  parseTime(stmt.ColumnText(7)),
+					SuspendedAt:  parseTime(stmt.ColumnText(8)),
 				})
 				return nil
 			},
@@ -183,19 +191,70 @@ func (s *Store) SetPassword(ctx context.Context, id int64, passwordHash string) 
 	return nil
 }
 
-// Delete hard-deletes the user row. Returns ErrNotFound when no row
-// matches.
-func (s *Store) Delete(ctx context.Context, id int64) error {
+// RecordLogin stamps last_login_at (and bumps updated_at) for the row
+// identified by id. Returns ErrNotFound when no row matches.
+func (s *Store) RecordLogin(ctx context.Context, id int64) error {
 	conn, err := s.pool.Take(ctx)
 	if err != nil {
 		return err
 	}
 	defer s.pool.Put(conn)
 
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if err := sqlitex.Execute(conn,
-		`DELETE FROM users WHERE id = ?;`,
-		&sqlitex.ExecOptions{Args: []any{id}}); err != nil {
-		return fmt.Errorf("users: delete: %w", err)
+		`UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?;`,
+		&sqlitex.ExecOptions{Args: []any{now, now, id}}); err != nil {
+		return fmt.Errorf("users: record login: %w", err)
+	}
+	if conn.Changes() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Suspend stamps suspended_at = now (and bumps updated_at). The update
+// only fires on rows that are not already suspended; calling Suspend on
+// an already-suspended row is a no-op and still returns nil. Returns
+// ErrNotFound only when the id does not exist.
+func (s *Store) Suspend(ctx context.Context, id int64) error {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.pool.Put(conn)
+
+	exists, err := rowExists(conn, `SELECT 1 FROM users WHERE id = ?;`, id)
+	if err != nil {
+		return fmt.Errorf("users: suspend: %w", err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := sqlitex.Execute(conn,
+		`UPDATE users SET suspended_at = ?, updated_at = ?
+		 WHERE id = ? AND suspended_at IS NULL;`,
+		&sqlitex.ExecOptions{Args: []any{now, now, id}}); err != nil {
+		return fmt.Errorf("users: suspend: %w", err)
+	}
+	return nil
+}
+
+// Reactivate clears suspended_at (and bumps updated_at) for the row
+// identified by id. Returns ErrNotFound when no row matches.
+func (s *Store) Reactivate(ctx context.Context, id int64) error {
+	conn, err := s.pool.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.pool.Put(conn)
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := sqlitex.Execute(conn,
+		`UPDATE users SET suspended_at = NULL, updated_at = ? WHERE id = ?;`,
+		&sqlitex.ExecOptions{Args: []any{now, id}}); err != nil {
+		return fmt.Errorf("users: reactivate: %w", err)
 	}
 	if conn.Changes() == 0 {
 		return ErrNotFound
@@ -253,6 +312,8 @@ func getOneOnConn(conn *sqlite.Conn, query string, arg any) (User, error) {
 			u.IsAdmin = stmt.ColumnInt64(4) != 0
 			u.CreatedAt = parseTime(stmt.ColumnText(5))
 			u.UpdatedAt = parseTime(stmt.ColumnText(6))
+			u.LastLoginAt = parseTime(stmt.ColumnText(7))
+			u.SuspendedAt = parseTime(stmt.ColumnText(8))
 			return nil
 		},
 	})

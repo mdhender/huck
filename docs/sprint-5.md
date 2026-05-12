@@ -151,7 +151,7 @@ here so reviewers don't re-litigate them mid-sprint.
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
 | T1.1 | DONE   |        | Migration applied; second `db migrate` is a no-op; schema_migrations holds versions 1 and 2. |
-| T1.2 | TODO   |        |       |
+| T1.2 | DONE   |        | Added `LastLoginAt`/`SuspendedAt` + `IsSuspended()`; new `RecordLogin`/`Suspend`/`Reactivate`; removed `Store.Delete`. Suspend uses an existence pre-check so an idempotent re-suspend still returns nil while a missing id returns `ErrNotFound`. Verified with narrower scope (`go build/vet/test ./internal/users/...`) — full-tree build break in `internal/server/admin_users.go:242` (`s.users.Delete`) and the matching `account_test.go` caller is the intentional signal called out in this task; T4.2 removes the handler+route. |
 | T2.1 | TODO   |        |       |
 | T2.2 | TODO   |        |       |
 | T3.1 | TODO   |        |       |

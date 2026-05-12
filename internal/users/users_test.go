@@ -47,6 +47,15 @@ func TestCreateAndGet(t *testing.T) {
 	if !got.IsAdmin {
 		t.Error("expected IsAdmin true")
 	}
+	if !got.LastLoginAt.IsZero() {
+		t.Errorf("LastLoginAt: want zero on fresh row, got %v", got.LastLoginAt)
+	}
+	if !got.SuspendedAt.IsZero() {
+		t.Errorf("SuspendedAt: want zero on fresh row, got %v", got.SuspendedAt)
+	}
+	if got.IsSuspended() {
+		t.Error("IsSuspended: want false on fresh row")
+	}
 
 	byHandle, err := s.GetByHandle(ctx, "ALICE")
 	if err != nil {
@@ -208,7 +217,7 @@ func TestSetPassword(t *testing.T) {
 	}
 }
 
-func TestDelete(t *testing.T) {
+func TestRecordLogin(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)
 	ctx := context.Background()
@@ -217,13 +226,81 @@ func TestDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := s.Delete(ctx, u.ID); err != nil {
-		t.Fatalf("Delete: %v", err)
+	if !u.LastLoginAt.IsZero() {
+		t.Fatalf("fresh user LastLoginAt = %v, want zero", u.LastLoginAt)
 	}
-	if _, err := s.GetByID(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("after Delete: want ErrNotFound, got %v", err)
+
+	if err := s.RecordLogin(ctx, u.ID); err != nil {
+		t.Fatalf("RecordLogin: %v", err)
 	}
-	if err := s.Delete(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
-		t.Fatalf("Delete twice: want ErrNotFound, got %v", err)
+	got, err := s.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.LastLoginAt.IsZero() {
+		t.Error("LastLoginAt: want non-zero after RecordLogin")
+	}
+	if !got.UpdatedAt.After(u.UpdatedAt) {
+		t.Errorf("updated_at not bumped: %v vs %v", got.UpdatedAt, u.UpdatedAt)
+	}
+
+	if err := s.RecordLogin(ctx, 9999); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("RecordLogin missing id: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSuspendAndReactivate(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	ctx := context.Background()
+
+	u, err := s.Create(ctx, users.NewUser{Handle: "alice", Email: "a@x", PasswordHash: "h"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := s.Suspend(ctx, u.ID); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	got, err := s.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !got.IsSuspended() {
+		t.Error("IsSuspended: want true after Suspend")
+	}
+	firstSuspendedAt := got.SuspendedAt
+
+	// Suspending an already-suspended user is a no-op (still nil).
+	if err := s.Suspend(ctx, u.ID); err != nil {
+		t.Fatalf("Suspend (idempotent): %v", err)
+	}
+	got2, err := s.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !got2.SuspendedAt.Equal(firstSuspendedAt) {
+		t.Errorf("Suspend re-stamped suspended_at: %v vs %v", got2.SuspendedAt, firstSuspendedAt)
+	}
+
+	if err := s.Reactivate(ctx, u.ID); err != nil {
+		t.Fatalf("Reactivate: %v", err)
+	}
+	got3, err := s.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got3.IsSuspended() {
+		t.Error("IsSuspended: want false after Reactivate")
+	}
+	if !got3.SuspendedAt.IsZero() {
+		t.Errorf("SuspendedAt: want zero after Reactivate, got %v", got3.SuspendedAt)
+	}
+
+	if err := s.Suspend(ctx, 9999); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("Suspend missing id: want ErrNotFound, got %v", err)
+	}
+	if err := s.Reactivate(ctx, 9999); !errors.Is(err, users.ErrNotFound) {
+		t.Fatalf("Reactivate missing id: want ErrNotFound, got %v", err)
 	}
 }
