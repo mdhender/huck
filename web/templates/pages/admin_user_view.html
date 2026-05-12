@@ -19,12 +19,36 @@
         <dd><time datetime="{{ .UpdatedAtISO }}">{{ .UpdatedAt }}</time></dd>
     </dl>
     <a href="/admin/users/{{ .User.ID }}/edit" role="button">Edit</a>
+</article>
+
+<article>
+    <header><strong>Account status</strong></header>
+    <dl>
+        <dt>Status</dt>
+        <dd>{{ .Status }}</dd>
+        {{ if .User.IsSuspended }}
+            <dt>Suspended</dt>
+            <dd><time datetime="{{ .SuspendedAtISO }}">{{ .SuspendedAt }}</time></dd>
+        {{ end }}
+    </dl>
     {{ if not .IsSelf }}
-        <form method="post" action="/admin/users/{{ .User.ID }}/delete"
-              style="display:inline"
-              onsubmit="return confirm('Delete user {{ .User.Handle }}? This cannot be undone.');">
-            <button type="submit" class="contrast">Delete</button>
-        </form>
+        {{ if .User.IsSuspended }}
+            <form method="post" action="/admin/users/{{ .User.ID }}/reactivate"
+                  x-data>
+                <button type="submit"
+                        @click.prevent="if (confirm('Reactivate account {{ .User.Handle }}?')) $el.closest('form').submit()">
+                    Reactivate account
+                </button>
+            </form>
+        {{ else }}
+            <form method="post" action="/admin/users/{{ .User.ID }}/suspend"
+                  x-data>
+                <button type="submit" class="contrast"
+                        @click.prevent="if (confirm('Suspend account {{ .User.Handle }}?')) $el.closest('form').submit()">
+                    Suspend account
+                </button>
+            </form>
+        {{ end }}
     {{ end }}
 </article>
 {{ end }}

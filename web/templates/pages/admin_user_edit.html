@@ -51,13 +51,5 @@
             <a href="/admin/users/{{ .User.ID }}" role="button" class="secondary">Cancel</a>
         </div>
     </form>
-
-    {{ if not .IsSelf }}
-        <hr>
-        <form method="post" action="/admin/users/{{ .User.ID }}/delete"
-              onsubmit="return confirm('Delete user {{ .User.Handle }}? This cannot be undone.');">
-            <button type="submit" class="contrast">Delete user</button>
-        </form>
-    {{ end }}
 </article>
 {{ end }}

@@ -39,14 +39,17 @@ type adminUsersView struct {
 // Sidebar/topbar chrome lives on the surrounding AppPage.Shell now, so
 // the page-only view no longer carries the signed-in handle.
 type adminUserView struct {
-	User         users.User
-	IsSelf       bool
-	CreatedAt    string
-	CreatedAtISO string
-	UpdatedAt    string
-	UpdatedAtISO string
-	Error        string
-	Notice       string
+	User           users.User
+	IsSelf         bool
+	CreatedAt      string
+	CreatedAtISO   string
+	UpdatedAt      string
+	UpdatedAtISO   string
+	Status         string
+	SuspendedAt    string
+	SuspendedAtISO string
+	Error          string
+	Notice         string
 }
 
 // usersShell builds the [Home, Admin, Users] app-shell context shared by
@@ -247,9 +250,11 @@ func (s *Server) handleAdminUsersEditSubmit(c *echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/admin/users/"+strconv.FormatInt(id, 10))
 }
 
-// handleAdminUsersDelete hard-deletes a user. Refuses to delete self
-// (sprint-2.md self-lockout guard).
-func (s *Server) handleAdminUsersDelete(c *echo.Context) error {
+// handleAdminUsersSuspend soft-suspends a user. Refuses to suspend self
+// (mirror of the existing self-demote 403 guard). Existing JWTs continue
+// to work until expiry; project policy is to rotate --jwt-secret to mass-
+// invalidate. See docs/sprint-5.md T3.1 and DESIGN.md §8.
+func (s *Server) handleAdminUsersSuspend(c *echo.Context) error {
 	claims := currentClaims(c)
 	id, err := parseUserID(c)
 	if err != nil {
@@ -257,15 +262,31 @@ func (s *Server) handleAdminUsersDelete(c *echo.Context) error {
 	}
 	if id == claims.UserID() {
 		return echo.NewHTTPError(http.StatusForbidden,
-			"You cannot delete yourself. Ask another admin to remove this account.")
+			"You cannot suspend yourself. Ask another admin to make this change.")
 	}
-	if err := s.users.Delete(c.Request().Context(), id); err != nil {
+	if err := s.users.Suspend(c.Request().Context(), id); err != nil {
 		if errors.Is(err, users.ErrNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "User not found.")
 		}
 		return err
 	}
-	return c.Redirect(http.StatusSeeOther, "/admin/users")
+	return hxRedirect(c, "/admin/users/"+strconv.FormatInt(id, 10))
+}
+
+// handleAdminUsersReactivate clears suspended_at on a user. No self-guard:
+// a user cannot suspend themselves, so cannot reactivate themselves either.
+func (s *Server) handleAdminUsersReactivate(c *echo.Context) error {
+	id, err := parseUserID(c)
+	if err != nil {
+		return err
+	}
+	if err := s.users.Reactivate(c.Request().Context(), id); err != nil {
+		if errors.Is(err, users.ErrNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "User not found.")
+		}
+		return err
+	}
+	return hxRedirect(c, "/admin/users/"+strconv.FormatInt(id, 10))
 }
 
 // renderAdminUserEditError re-renders the edit form with an error banner.
@@ -283,13 +304,22 @@ func (s *Server) renderAdminUserEditError(c *echo.Context, claims *auth.Claims, 
 func newAdminUserView(claims *auth.Claims, u users.User) adminUserView {
 	createdAt, createdAtISO := fmtUTC(u.CreatedAt)
 	updatedAt, updatedAtISO := fmtUTC(u.UpdatedAt)
+	status := "Active"
+	var suspendedAt, suspendedAtISO string
+	if u.IsSuspended() {
+		status = "Suspended"
+		suspendedAt, suspendedAtISO = fmtUTC(u.SuspendedAt)
+	}
 	return adminUserView{
-		User:         u,
-		IsSelf:       u.ID == claims.UserID(),
-		CreatedAt:    createdAt,
-		CreatedAtISO: createdAtISO,
-		UpdatedAt:    updatedAt,
-		UpdatedAtISO: updatedAtISO,
+		User:           u,
+		IsSelf:         u.ID == claims.UserID(),
+		CreatedAt:      createdAt,
+		CreatedAtISO:   createdAtISO,
+		UpdatedAt:      updatedAt,
+		UpdatedAtISO:   updatedAtISO,
+		Status:         status,
+		SuspendedAt:    suspendedAt,
+		SuspendedAtISO: suspendedAtISO,
 	}
 }
 

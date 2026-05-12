@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/mdhender/huck/internal/auth"
-	"github.com/mdhender/huck/internal/users"
 )
 
 func TestAdminUsersAnonymousRedirected(t *testing.T) {
@@ -279,53 +278,146 @@ func TestAdminUsersEditRefusesSelfDemote(t *testing.T) {
 	}
 }
 
-func TestAdminUsersDelete(t *testing.T) {
+func TestAdminUsersViewShowsSuspendForActive(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	client := f.adminClient(t)
+
+	body := getBody(t, client,
+		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10), http.StatusOK)
+	if !strings.Contains(body, ">Active<") {
+		t.Errorf("active user detail missing Status=Active; body=%s", trim(body))
+	}
+	if !strings.Contains(body, "Suspend account") {
+		t.Errorf("active user detail missing Suspend button; body=%s", trim(body))
+	}
+	if strings.Contains(body, "Reactivate account") {
+		t.Errorf("active user detail should not show Reactivate; body=%s", trim(body))
+	}
+	if strings.Contains(body, "Delete account") || strings.Contains(body, "Delete user") {
+		t.Errorf("user detail should no longer show a delete control; body=%s", trim(body))
+	}
+}
+
+func TestAdminUsersViewShowsReactivateForSuspended(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	if err := f.usersStore.Suspend(context.Background(), f.user.ID); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	client := f.adminClient(t)
+
+	body := getBody(t, client,
+		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10), http.StatusOK)
+	if !strings.Contains(body, ">Suspended<") {
+		t.Errorf("suspended user detail missing Status=Suspended; body=%s", trim(body))
+	}
+	if !strings.Contains(body, "Reactivate account") {
+		t.Errorf("suspended user detail missing Reactivate button; body=%s", trim(body))
+	}
+	if strings.Contains(body, "Suspend account") {
+		t.Errorf("suspended user detail should not show Suspend; body=%s", trim(body))
+	}
+}
+
+func TestAdminUsersSuspend(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
 	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
 
 	resp := mustPost(t, client,
-		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/delete",
+		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/suspend",
+		nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status: got %d, want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/admin/users/"+strconv.FormatInt(f.user.ID, 10) {
+		t.Errorf("Location: got %q, want /admin/users/<id>", loc)
+	}
+
+	got, err := f.usersStore.GetByID(context.Background(), f.user.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !got.IsSuspended() {
+		t.Errorf("user should be suspended after POST /suspend")
+	}
+}
+
+func TestAdminUsersSuspendRefusesSelf(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	client := f.adminClient(t)
+	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
+
+	resp := mustPost(t, client,
+		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.admin.ID, 10)+"/suspend",
+		nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want 403; body=%s", resp.StatusCode, trim(string(body)))
+	}
+
+	got, err := f.usersStore.GetByID(context.Background(), f.admin.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.IsSuspended() {
+		t.Errorf("self-suspend leaked through")
+	}
+}
+
+func TestAdminUsersSuspendMissing(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	client := f.adminClient(t)
+	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
+
+	resp := mustPost(t, client,
+		f.ts.URL+"/admin/users/9999/suspend", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status: got %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestAdminUsersReactivate(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	if err := f.usersStore.Suspend(context.Background(), f.user.ID); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	client := f.adminClient(t)
+	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
+
+	resp := mustPost(t, client,
+		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/reactivate",
 		nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status: got %d, want 303", resp.StatusCode)
 	}
 
-	if _, err := f.usersStore.GetByID(context.Background(), f.user.ID); !errors.Is(err, users.ErrNotFound) {
-		t.Errorf("after delete: want ErrNotFound, got %v", err)
+	got, err := f.usersStore.GetByID(context.Background(), f.user.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.IsSuspended() {
+		t.Errorf("user should no longer be suspended after POST /reactivate")
 	}
 }
 
-func TestAdminUsersDeleteRefusesSelf(t *testing.T) {
+func TestAdminUsersReactivateMissing(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
 	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
 
 	resp := mustPost(t, client,
-		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.admin.ID, 10)+"/delete",
-		nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status: got %d, want 403", resp.StatusCode)
-	}
-
-	if _, err := f.usersStore.GetByID(context.Background(), f.admin.ID); err != nil {
-		t.Errorf("admin should still exist after self-delete attempt: %v", err)
-	}
-}
-
-func TestAdminUsersDeleteMissing(t *testing.T) {
-	t.Parallel()
-	f := newAdminFixture(t)
-	client := f.adminClient(t)
-	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-
-	resp := mustPost(t, client,
-		f.ts.URL+"/admin/users/9999/delete",
-		nil)
+		f.ts.URL+"/admin/users/9999/reactivate", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status: got %d, want 404", resp.StatusCode)

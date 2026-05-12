@@ -130,7 +130,8 @@ func (s *Server) installRoutes() {
 	admin.GET("/users/:id", s.handleAdminUsersView)
 	admin.GET("/users/:id/edit", s.handleAdminUsersEditForm)
 	admin.POST("/users/:id/edit", s.handleAdminUsersEditSubmit)
-	admin.POST("/users/:id/delete", s.handleAdminUsersDelete)
+	admin.POST("/users/:id/suspend", s.handleAdminUsersSuspend)
+	admin.POST("/users/:id/reactivate", s.handleAdminUsersReactivate)
 }
 
 // homePublicView is the data shape consumed by pages/home_public.html.
