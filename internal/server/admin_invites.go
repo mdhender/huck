@@ -62,7 +62,7 @@ type adminInviteConfirmView struct {
 // invitesShell builds the app-shell context for any /admin/invites
 // render (list, create success, create error). Centralised so the three
 // callsites stay in lockstep on sidebar section, topbar title, and the
-// [Home, Admin, Invites] breadcrumb trail.
+// [Home, Administration, Invitations] breadcrumb trail.
 func invitesShell(claims *auth.Claims) ShellView {
 	return ShellView{
 		Sidebar: SidebarView{
@@ -72,11 +72,11 @@ func invitesShell(claims *auth.Claims) ShellView {
 		},
 		Topbar: TopbarView{
 			Handle: claims.Handle,
-			Title:  "Invites",
+			Title:  "Invitations",
 		},
 		Crumbs: []Crumb{
 			{Label: "Home", URL: "/"},
-			{Label: "Admin", URL: "/admin"},
+			{Label: "Administration", URL: "/admin"},
 			{Label: "Invitations"},
 		},
 	}

@@ -383,8 +383,8 @@ func TestRendererPicksLayoutPerPage(t *testing.T) {
 				Page: adminIndexView{},
 				Shell: ShellView{
 					Sidebar: SidebarView{Handle: "alice", IsAdmin: true, Section: SectionAdminDashboard},
-					Topbar:  TopbarView{Handle: "alice", Title: "Admin"},
-					Crumbs:  []Crumb{{Label: "Home", URL: "/"}, {Label: "Admin"}},
+					Topbar:  TopbarView{Handle: "alice", Title: "Administration"},
+					Crumbs:  []Crumb{{Label: "Home", URL: "/"}, {Label: "Administration"}},
 				},
 			},
 			wantContains: []string{
@@ -438,8 +438,8 @@ func TestAdminIndexRendersAppShell(t *testing.T) {
 		Page: adminIndexView{},
 		Shell: ShellView{
 			Sidebar: SidebarView{Handle: "admin", IsAdmin: true, Section: SectionAdminDashboard},
-			Topbar:  TopbarView{Handle: "admin", Title: "Admin"},
-			Crumbs:  []Crumb{{Label: "Home", URL: "/"}, {Label: "Admin"}},
+			Topbar:  TopbarView{Handle: "admin", Title: "Administration"},
+			Crumbs:  []Crumb{{Label: "Home", URL: "/"}, {Label: "Administration"}},
 		},
 	}
 
@@ -460,12 +460,12 @@ func TestAdminIndexRendersAppShell(t *testing.T) {
 		`huck-sidebar`,
 		`huck-topbar`,
 		`class="huck-page-header"`,
-		`<h1>Admin</h1>`,
+		`<h1>Administration</h1>`,
 		// Topbar carries the title and the signed-in handle.
 		`<em>admin</em>`,
-		// Breadcrumb: Home links back, Admin is the current page.
+		// Breadcrumb: Home links back, Administration is the current page.
 		`<a href="/">Home</a>`,
-		`<span aria-current="page">Admin</span>`,
+		`<span aria-current="page">Administration</span>`,
 		// Sidebar: admin-dashboard is the current section.
 		`<a href="/admin" aria-current="page">Dashboard</a>`,
 	} {
@@ -521,7 +521,7 @@ func TestAdminUsersListRendersAppShell(t *testing.T) {
 			Topbar:  TopbarView{Handle: "admin", Title: "Users"},
 			Crumbs: []Crumb{
 				{Label: "Home", URL: "/"},
-				{Label: "Admin", URL: "/admin"},
+				{Label: "Administration", URL: "/admin"},
 				{Label: "Users"},
 			},
 		},
@@ -549,9 +549,9 @@ func TestAdminUsersListRendersAppShell(t *testing.T) {
 		`alice@example.com`,
 		// Topbar carries the title and the signed-in handle.
 		`<em>admin</em>`,
-		// Breadcrumb: Home and Admin link back, Users is current.
+		// Breadcrumb: Home and Administration link back, Users is current.
 		`<a href="/">Home</a>`,
-		`<a href="/admin">Admin</a>`,
+		`<a href="/admin">Administration</a>`,
 		`<span aria-current="page">Users</span>`,
 		// Sidebar: admin-users is the current section.
 		`<a href="/admin/users" aria-current="page">Users</a>`,
@@ -618,9 +618,9 @@ func TestAdminUsersViewRendersAppShell(t *testing.T) {
 		`alice@example.com`,
 		// Topbar carries the viewed user's handle as the page title.
 		`<em>admin</em>`,
-		// Breadcrumb: Home / Admin / Users link back; the handle is current.
+		// Breadcrumb: Home / Administration / Users link back; the handle is current.
 		`<a href="/">Home</a>`,
-		`<a href="/admin">Admin</a>`,
+		`<a href="/admin">Administration</a>`,
 		`<a href="/admin/users">Users</a>`,
 		`<span aria-current="page">alice</span>`,
 		// Sidebar: admin-users is the current section.
@@ -693,9 +693,9 @@ func TestAdminUsersEditRendersAppShell(t *testing.T) {
 		`name="is_admin"`,
 		// Topbar carries the signed-in handle.
 		`<em>admin</em>`,
-		// Breadcrumb: Home / Admin / Users / <handle> link back; Edit is current.
+		// Breadcrumb: Home / Administration / Users / <handle> link back; Edit is current.
 		`<a href="/">Home</a>`,
-		`<a href="/admin">Admin</a>`,
+		`<a href="/admin">Administration</a>`,
 		`<a href="/admin/users">Users</a>`,
 		// The per-user link must keep the numeric id even though the
 		// label uses the handle (sprint plan T4.5: "keep URL parameters
@@ -740,11 +740,11 @@ func TestAdminInvitesRendersAppShell(t *testing.T) {
 		Page: adminInvitesView{},
 		Shell: ShellView{
 			Sidebar: SidebarView{Handle: "admin", IsAdmin: true, Section: SectionAdminInvites},
-			Topbar:  TopbarView{Handle: "admin", Title: "Invites"},
+			Topbar:  TopbarView{Handle: "admin", Title: "Invitations"},
 			Crumbs: []Crumb{
 				{Label: "Home", URL: "/"},
-				{Label: "Admin", URL: "/admin"},
-				{Label: "Invites"},
+				{Label: "Administration", URL: "/admin"},
+				{Label: "Invitations"},
 			},
 		},
 	}
@@ -771,12 +771,12 @@ func TestAdminInvitesRendersAppShell(t *testing.T) {
 		`class="huck-form-stack"`,
 		// Topbar carries the signed-in handle.
 		`<em>admin</em>`,
-		// Breadcrumb: Home and Admin link back, Invites is current.
+		// Breadcrumb: Home and Administration link back, Invitations is current.
 		`<a href="/">Home</a>`,
-		`<a href="/admin">Admin</a>`,
-		`<span aria-current="page">Invites</span>`,
+		`<a href="/admin">Administration</a>`,
+		`<span aria-current="page">Invitations</span>`,
 		// Sidebar: admin-invites is the current section.
-		`<a href="/admin/invites" aria-current="page">Invites</a>`,
+		`<a href="/admin/invites" aria-current="page">Invitations</a>`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q\n--- output ---\n%s", want, out)

@@ -52,7 +52,7 @@ func TestAdminIndexAdminRendersDashboard(t *testing.T) {
 	// Page heading and the two anchor links Sprint 4's sidebar will
 	// surface — proves the canonical dashboard renders, not a redirect.
 	for _, want := range []string{
-		"<h1>Admin</h1>",
+		"<h1>Administration</h1>",
 		`href="/admin/invites"`,
 		`href="/admin/users"`,
 	} {

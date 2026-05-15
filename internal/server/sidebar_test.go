@@ -41,9 +41,9 @@ func TestSidebarPartial(t *testing.T) {
 			`href="/admin/invites"`,
 			`href="/admin/users"`,
 			`Dashboard`,
-			`Invites`,
+			`Invitations`,
 			`Users`,
-			`<h2>Admin</h2>`,
+			`<h2>Administration</h2>`,
 		} {
 			if strings.Contains(out, banned) {
 				t.Errorf("non-admin output unexpectedly contains %q\n--- output ---\n%s", banned, out)
@@ -64,11 +64,11 @@ func TestSidebarPartial(t *testing.T) {
 			`>Home</a>`,
 			`href="/account"`,
 			`>Account</a>`,
-			`<h2>Admin</h2>`,
+			`<h2>Administration</h2>`,
 			`href="/admin"`,
 			`>Dashboard</a>`,
 			`href="/admin/invites"`,
-			`>Invites</a>`,
+			`>Invitations</a>`,
 			`href="/admin/users"`,
 			`>Users</a>`,
 		} {
@@ -106,7 +106,7 @@ func TestSidebarPartial(t *testing.T) {
 			{
 				name:      "admin invites",
 				view:      SidebarView{IsAdmin: true, Section: SectionAdminInvites},
-				wantLink:  `<a href="/admin/invites" aria-current="page">Invites</a>`,
+				wantLink:  `<a href="/admin/invites" aria-current="page">Invitations</a>`,
 				otherUrls: []string{"/", "/account", "/admin", "/admin/users"},
 			},
 			{

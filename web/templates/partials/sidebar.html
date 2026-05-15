@@ -17,7 +17,7 @@
         </li>
     </ul>
     {{- if .IsAdmin }}
-    <h2>Admin</h2>
+    <h2>Administration</h2>
     <ul>
         <li>
             {{- if eq .Section "admin-dashboard" }}
@@ -28,9 +28,9 @@
         </li>
         <li>
             {{- if eq .Section "admin-invites" }}
-            <a href="/admin/invites" aria-current="page">Invites</a>
+            <a href="/admin/invites" aria-current="page">Invitations</a>
             {{- else }}
-            <a href="/admin/invites">Invites</a>
+            <a href="/admin/invites">Invitations</a>
             {{- end }}
         </li>
         <li>

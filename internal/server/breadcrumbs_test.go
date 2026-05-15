@@ -16,7 +16,7 @@ func TestCrumbCurrent(t *testing.T) {
 		want bool
 	}{
 		{name: "linked crumb is not current", c: Crumb{Label: "Home", URL: "/"}, want: false},
-		{name: "empty-URL crumb is current", c: Crumb{Label: "Invites"}, want: true},
+		{name: "empty-URL crumb is current", c: Crumb{Label: "Invitations"}, want: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -35,11 +35,11 @@ func TestAppPageWrapping(t *testing.T) {
 	page := homeAuthedView{Handle: "alice"}
 	shell := ShellView{
 		Sidebar: SidebarView{Handle: "alice", IsAdmin: true, Section: SectionAdminInvites},
-		Topbar:  TopbarView{Handle: "alice", Title: "Invites"},
+		Topbar:  TopbarView{Handle: "alice", Title: "Invitations"},
 		Crumbs: []Crumb{
 			{Label: "Home", URL: "/"},
-			{Label: "Admin", URL: "/admin"},
-			{Label: "Invites"},
+			{Label: "Administration", URL: "/admin"},
+			{Label: "Invitations"},
 		},
 	}
 
@@ -101,8 +101,8 @@ func TestBreadcrumbsPartial(t *testing.T) {
 	t.Run("three crumbs with current last", func(t *testing.T) {
 		crumbs := []Crumb{
 			{Label: "Home", URL: "/"},
-			{Label: "Admin", URL: "/admin"},
-			{Label: "Invites"},
+			{Label: "Administration", URL: "/admin"},
+			{Label: "Invitations"},
 		}
 		var buf strings.Builder
 		if err := r.partials.ExecuteTemplate(&buf, "partials/breadcrumbs.html", crumbs); err != nil {
@@ -114,8 +114,8 @@ func TestBreadcrumbsPartial(t *testing.T) {
 			`<nav aria-label="Breadcrumb"`,
 			`<ol>`,
 			`<a href="/">Home</a>`,
-			`<a href="/admin">Admin</a>`,
-			`<span aria-current="page">Invites</span>`,
+			`<a href="/admin">Administration</a>`,
+			`<span aria-current="page">Invitations</span>`,
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("output missing %q\n--- output ---\n%s", want, out)
@@ -127,10 +127,10 @@ func TestBreadcrumbsPartial(t *testing.T) {
 			t.Errorf("expected exactly 2 hrefs (linked crumbs), got %d\n--- output ---\n%s",
 				strings.Count(out, `href`), out)
 		}
-		// Ordering: Home before Admin before Invites.
+		// Ordering: Home before Administration before Invitations.
 		homeIdx := strings.Index(out, "Home")
-		adminIdx := strings.Index(out, "Admin")
-		invitesIdx := strings.Index(out, "Invites")
+		adminIdx := strings.Index(out, "Administration")
+		invitesIdx := strings.Index(out, "Invitations")
 		if !(homeIdx < adminIdx && adminIdx < invitesIdx) {
 			t.Errorf("crumbs out of order: home=%d admin=%d invites=%d\n--- output ---\n%s",
 				homeIdx, adminIdx, invitesIdx, out)

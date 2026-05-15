@@ -170,11 +170,11 @@ func (s *Server) handleAdminIndex(c *echo.Context) error {
 			},
 			Topbar: TopbarView{
 				Handle: claims.Handle,
-				Title:  "Admin",
+				Title:  "Administration",
 			},
 			Crumbs: []Crumb{
 				{Label: "Home", URL: "/"},
-				{Label: "Admin"},
+				{Label: "Administration"},
 			},
 		},
 	})

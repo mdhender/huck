@@ -15,7 +15,7 @@ func TestTopbarPartial(t *testing.T) {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 
-	v := TopbarView{Handle: "alice", Title: "Invites"}
+	v := TopbarView{Handle: "alice", Title: "Invitations"}
 	var buf strings.Builder
 	if err := r.partials.ExecuteTemplate(&buf, "partials/topbar.html", v); err != nil {
 		t.Fatalf("execute: %v", err)
@@ -24,7 +24,7 @@ func TestTopbarPartial(t *testing.T) {
 
 	for _, want := range []string{
 		`class="huck-topbar"`,
-		`Invites`,
+		`Invitations`,
 		`alice`,
 		`<form method="post" action="/logout">`,
 		`type="submit"`,
@@ -43,7 +43,7 @@ func TestTopbarPartial(t *testing.T) {
 
 	// Title must appear before the handle so the layout is title-left,
 	// user-right regardless of any CSS that might later reorder.
-	titleIdx := strings.Index(out, "Invites")
+	titleIdx := strings.Index(out, "Invitations")
 	handleIdx := strings.Index(out, "alice")
 	if titleIdx < 0 || handleIdx < 0 || titleIdx >= handleIdx {
 		t.Errorf("title should appear before handle in source order: titleIdx=%d handleIdx=%d\n--- output ---\n%s",

@@ -68,7 +68,7 @@ func usersShell(claims *auth.Claims) ShellView {
 		},
 		Crumbs: []Crumb{
 			{Label: "Home", URL: "/"},
-			{Label: "Admin", URL: "/admin"},
+			{Label: "Administration", URL: "/admin"},
 			{Label: "Users"},
 		},
 	}
@@ -90,7 +90,7 @@ func userDetailShell(claims *auth.Claims, u users.User) ShellView {
 		},
 		Crumbs: []Crumb{
 			{Label: "Home", URL: "/"},
-			{Label: "Admin", URL: "/admin"},
+			{Label: "Administration", URL: "/admin"},
 			{Label: "Users", URL: "/admin/users"},
 			{Label: u.Handle},
 		},
@@ -113,7 +113,7 @@ func userEditShell(claims *auth.Claims, u users.User) ShellView {
 		},
 		Crumbs: []Crumb{
 			{Label: "Home", URL: "/"},
-			{Label: "Admin", URL: "/admin"},
+			{Label: "Administration", URL: "/admin"},
 			{Label: "Users", URL: "/admin/users"},
 			{Label: u.Handle, URL: "/admin/users/" + strconv.FormatInt(u.ID, 10)},
 			{Label: "Edit"},
