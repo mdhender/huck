@@ -178,6 +178,157 @@ func TestAdminInvitesListEmpty(t *testing.T) {
 	}
 }
 
+// TestAdminInvitesListColumnsAndRows pins the sprint-5 T5.1 reshape:
+// the table header is Email, Role, Status, Sent, Expires, Actions; all
+// invites render regardless of status (including Accepted and Revoked
+// rows); Pending rows expose Resend/Revoke; Accepted and Revoked rows
+// do not. The page H1 is "Invitations".
+func TestAdminInvitesListColumnsAndRows(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	ctx := context.Background()
+
+	pendingUser, err := f.invitesStore.Create(ctx, invites.NewInvite{
+		Email: "pending-user@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("seed pending user invite: %v", err)
+	}
+	pendingAdmin, err := f.invitesStore.Create(ctx, invites.NewInvite{
+		Email: "pending-admin@example.com", InvitedBy: f.admin.ID, IsAdmin: true,
+	})
+	if err != nil {
+		t.Fatalf("seed pending admin invite: %v", err)
+	}
+	accepted, err := f.invitesStore.Create(ctx, invites.NewInvite{
+		Email: "accepted@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("seed accepted invite: %v", err)
+	}
+	revoked, err := f.invitesStore.Create(ctx, invites.NewInvite{
+		Email: "revoked@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("seed revoked invite: %v", err)
+	}
+
+	conn, err := f.pool.Take(ctx)
+	if err != nil {
+		t.Fatalf("pool.Take: %v", err)
+	}
+	if err := f.invitesStore.Consume(ctx, conn, accepted.Token); err != nil {
+		f.pool.Put(conn)
+		t.Fatalf("Consume: %v", err)
+	}
+	f.pool.Put(conn)
+
+	if err := f.invitesStore.Revoke(ctx, revoked.Token); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	client := f.adminClient(t)
+	body := getBody(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
+
+	if !strings.Contains(body, "<h1>Invitations</h1>") {
+		t.Errorf("missing <h1>Invitations</h1>; body=%s", trim(body))
+	}
+
+	// Header order. Pin the literal sequence so a future column
+	// reshuffle is caught.
+	headerOrder := []string{
+		`<th scope="col">Email</th>`,
+		`<th scope="col">Role</th>`,
+		`<th scope="col">Status</th>`,
+		`<th scope="col">Sent</th>`,
+		`<th scope="col">Expires</th>`,
+		`<th scope="col">Actions</th>`,
+	}
+	lastIdx := -1
+	for _, h := range headerOrder {
+		idx := strings.Index(body, h)
+		if idx < 0 {
+			t.Errorf("missing header %q; body=%s", h, trim(body))
+			continue
+		}
+		if idx <= lastIdx {
+			t.Errorf("header %q out of order (idx=%d, prev=%d)", h, idx, lastIdx)
+		}
+		lastIdx = idx
+	}
+
+	// Every invite renders, regardless of status.
+	for _, email := range []string{
+		"pending-user@example.com",
+		"pending-admin@example.com",
+		"accepted@example.com",
+		"revoked@example.com",
+	} {
+		if !strings.Contains(body, email) {
+			t.Errorf("missing row for %s; body=%s", email, trim(body))
+		}
+	}
+
+	type rowCase struct {
+		name          string
+		token         string
+		wantRole      string
+		wantStatus    string
+		wantActions   bool
+	}
+	cases := []rowCase{
+		{"pending user", pendingUser.Token.String(), "User", "Pending", true},
+		{"pending admin", pendingAdmin.Token.String(), "Admin", "Pending", true},
+		{"accepted", accepted.Token.String(), "User", "Accepted", false},
+		{"revoked", revoked.Token.String(), "User", "Revoked", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			row := extractInviteRow(t, body, tc.token)
+			if !strings.Contains(row, `<td>`+tc.wantRole+`</td>`) {
+				t.Errorf("row %s: missing <td>%s</td>; row=%s", tc.name, tc.wantRole, trim(row))
+			}
+			if !strings.Contains(row, `<td>`+tc.wantStatus+`</td>`) {
+				t.Errorf("row %s: missing <td>%s</td>; row=%s", tc.name, tc.wantStatus, trim(row))
+			}
+			hasResend := strings.Contains(row, ">Resend<")
+			hasRevoke := strings.Contains(row, ">Revoke<")
+			if tc.wantActions {
+				if !hasResend {
+					t.Errorf("row %s: expected Resend action; row=%s", tc.name, trim(row))
+				}
+				if !hasRevoke {
+					t.Errorf("row %s: expected Revoke action; row=%s", tc.name, trim(row))
+				}
+			} else {
+				if hasResend {
+					t.Errorf("row %s: did not expect Resend; row=%s", tc.name, trim(row))
+				}
+				if hasRevoke {
+					t.Errorf("row %s: did not expect Revoke; row=%s", tc.name, trim(row))
+				}
+			}
+		})
+	}
+}
+
+// extractInviteRow returns the substring of body covering one invite
+// row (<tr id="invite-…">…</tr>). Used by TestAdminInvitesListColumnsAndRows
+// to scope per-row assertions without false positives from other rows.
+func extractInviteRow(t *testing.T, body, token string) string {
+	t.Helper()
+	marker := `id="invite-` + token + `"`
+	start := strings.Index(body, marker)
+	if start < 0 {
+		t.Fatalf("row marker %q not found in body", marker)
+	}
+	end := strings.Index(body[start:], "</tr>")
+	if end < 0 {
+		t.Fatalf("no </tr> after row marker %q", marker)
+	}
+	return body[start : start+end+len("</tr>")]
+}
+
 func TestAdminInvitesCreate(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)

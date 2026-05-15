@@ -766,7 +766,7 @@ func TestAdminInvitesRendersAppShell(t *testing.T) {
 		`huck-sidebar`,
 		`huck-topbar`,
 		`class="huck-page-header"`,
-		`<h1>Invites</h1>`,
+		`<h1>Invitations</h1>`,
 		// The create form gets .huck-form-stack for vertical rhythm.
 		`class="huck-form-stack"`,
 		// Topbar carries the signed-in handle.

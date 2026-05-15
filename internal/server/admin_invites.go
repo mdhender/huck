@@ -18,16 +18,21 @@ import (
 
 // inviteRowView is the per-row data shape consumed by both
 // pages/admin_invites.html (in a range) and partials/invite_row.html
-// directly (HTMX swaps after resend).
+// directly (HTMX swaps after resend). Status uses Invite.Status's
+// Pending/Accepted/Expired/Revoked vocabulary (sprint-5 T2.2); the
+// CanResend/CanRevoke gates branch the row's action cell by that
+// status (sprint-5 T5.1).
 type inviteRowView struct {
 	Token        string
 	Email        string
+	Role         string
 	Status       string
 	CreatedAt    string
 	CreatedAtISO string
 	ExpiresAt    string
 	ExpiresAtISO string
 	CanResend    bool
+	CanRevoke    bool
 }
 
 // adminInvitesView is the data shape consumed by pages/admin_invites.html.
@@ -58,7 +63,7 @@ func invitesShell(claims *auth.Claims) ShellView {
 		Crumbs: []Crumb{
 			{Label: "Home", URL: "/"},
 			{Label: "Admin", URL: "/admin"},
-			{Label: "Invites"},
+			{Label: "Invitations"},
 		},
 	}
 }
@@ -242,25 +247,27 @@ func rowView(inv invites.Invite) inviteRowView {
 }
 
 func rowViewAt(inv invites.Invite, now time.Time) inviteRowView {
-	status := "pending"
-	canResend := true
-	switch {
-	case inv.Consumed():
-		status = "consumed"
-		canResend = false
-	case inv.Expired(now):
-		status = "expired"
+	status := inv.Status(now)
+	// Pending and Expired invites are still actionable (Resend extends
+	// expiry); Accepted and Revoked invites stay in the list for audit
+	// with no row actions (sprint-5 T5.1).
+	actionable := status == invites.StatusPending || status == invites.StatusExpired
+	role := "User"
+	if inv.IsAdmin {
+		role = "Admin"
 	}
 	createdAt, createdAtISO := fmtUTC(inv.CreatedAt)
 	expiresAt, expiresAtISO := fmtUTC(inv.ExpiresAt)
 	return inviteRowView{
 		Token:        inv.Token.String(),
 		Email:        inv.Email,
+		Role:         role,
 		Status:       status,
 		CreatedAt:    createdAt,
 		CreatedAtISO: createdAtISO,
 		ExpiresAt:    expiresAt,
 		ExpiresAtISO: expiresAtISO,
-		CanResend:    canResend,
+		CanResend:    actionable,
+		CanRevoke:    actionable,
 	}
 }

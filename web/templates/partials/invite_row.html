@@ -1,6 +1,7 @@
 {{ define "partials/invite_row.html" -}}
 <tr id="invite-{{ .Token }}">
     <td>{{ .Email }}</td>
+    <td>{{ .Role }}</td>
     <td>{{ .Status }}</td>
     <td><time datetime="{{ .CreatedAtISO }}">{{ .CreatedAt }}</time></td>
     <td><time datetime="{{ .ExpiresAtISO }}">{{ .ExpiresAt }}</time></td>
@@ -14,6 +15,8 @@
                   style="display:inline">
                 <button type="submit" class="secondary">Resend</button>
             </form>
+        {{ end }}
+        {{ if .CanRevoke }}
             <form method="post"
                   action="/admin/invites/{{ .Token }}/revoke"
                   hx-post="/admin/invites/{{ .Token }}/revoke"
