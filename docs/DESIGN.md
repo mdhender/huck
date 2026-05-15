@@ -242,6 +242,35 @@ CREATE TABLE schema_migrations (
 Lowercasing is enforced in Go; uniqueness is enforced in SQL. The DB row
 matches what the user sees.
 
+**Sprint 5 columns (migrations `0002_user_status.sql` and
+`0003_invite_status.sql`).** The released `0001_init.sql` snippet above
+is a historical record; the following columns were added by follow-up
+migrations and are present on every live database:
+
+- `users.last_login_at TEXT` — ISO-8601 UTC, NULL until the first
+  successful login. Bumped on every login (see §8.9).
+- `users.suspended_at  TEXT` — ISO-8601 UTC, NULL for active users.
+  Set by `POST /admin/users/:id/suspend`, cleared by
+  `POST /admin/users/:id/reactivate`.
+- `invites.revoked_at  TEXT` — ISO-8601 UTC, NULL for non-revoked
+  invites. Revoke is a soft-delete now (see §9).
+- `invites.is_admin    INTEGER NOT NULL DEFAULT 0` — `1` if the invite
+  creates an admin account. Read server-side at signup; the signup form
+  has no role field.
+
+The partial index `invites_email_active` is **recreated** by
+`0003_invite_status.sql` to exclude revoked rows:
+
+```sql
+CREATE UNIQUE INDEX invites_email_active
+    ON invites(email)
+    WHERE consumed_at IS NULL AND revoked_at IS NULL;
+```
+
+This is what makes "revoke an active invite, then re-invite the same
+email" succeed — without the predicate update the previous (revoked)
+row would still block the new insert.
+
 ## 8. Authentication
 
 ### 8.1 Cookie
@@ -387,6 +416,25 @@ Total length 3–32. Anything outside this set is rejected; the rule
 deliberately excludes characters that complicate URL encoding or HTML
 contexts.
 
+### 8.9 Suspended users
+
+A user with `suspended_at IS NOT NULL` cannot acquire a new JWT.
+`POST /login` checks `user.IsSuspended()` **after** password verify (so
+a wrong-password attempt cannot probe suspension state) and refuses
+with a 403 + "This account has been suspended." message instead of
+setting the auth cookie. `last_login_at` is updated only on fully
+successful logins, so a refused login leaves it unchanged.
+
+Existing JWTs issued before the suspension stay valid until their
+24-hour `exp`. Per the non-goal in §2, the project does not maintain a
+per-user revocation list; rotate `--jwt-secret` to mass-invalidate if a
+token must die early.
+
+`POST /admin/users/:id/suspend` and `POST /admin/users/:id/reactivate`
+are the only entry points (§10). The suspend handler refuses self
+("You cannot suspend yourself. Ask another admin to make this
+change.") to keep an admin from locking themselves out.
+
 ## 9. Invite flow
 
 ```diagram
@@ -407,24 +455,46 @@ contexts.
                                 ╰───────────╯
 ```
 
-1. **Create.** `POST /admin/invites {email}`. Server lowercases the email,
-   generates a 32-byte token (base64url), inserts a row with
-   `expires_at = now+7d`, and sends an email whose body links to
-   `${BASE_URL}/signup/<token>?email=<urlencoded-email>`. The
-   `email` query string is a UX aid only — it pre-fills the read-only
-   field on the signup form so the recipient can see which address the
-   invite is bound to. The token alone is the security boundary; the
-   email is re-validated server-side against the invite row.
+1. **Create.** `POST /admin/invites {email, role}`. The form carries a
+   Role radio (`user` / `admin`, default `user`). Server lowercases the
+   email and branches on role:
+   - **User invite** (`role=user`) — proceeds immediately.
+   - **Admin invite** (`role=admin`) — first POST renders an
+     interstitial (`pages/admin_invite_confirm.html`) with the
+     normalised email and a hidden `confirm=true` field. **No DB write,
+     no mail** until the operator clicks "Send admin invitation",
+     which re-POSTs `/admin/invites` with `role=admin&confirm=true`.
+     The role is recorded on the invite row as
+     `invites.is_admin = (role == "admin")`.
+
+   Once committed, the server generates a 32-byte token (base64url),
+   inserts a row with `expires_at = now+7d`, and sends an email whose
+   body links to `${BASE_URL}/signup/<token>?email=<urlencoded-email>`.
+   The `email` query string is a UX aid only — it pre-fills the
+   read-only field on the signup form so the recipient can see which
+   address the invite is bound to. The token alone is the security
+   boundary; the email is re-validated server-side against the invite
+   row.
+
    The unique partial index `invites_email_active` enforces "one
-   active invite per email"; if an unconsumed invite exists for the
-   same address, the create endpoint returns a 409 and the admin must
-   resend or revoke the existing one.
+   active invite per email" with the predicate
+   `consumed_at IS NULL AND revoked_at IS NULL` (§7.4). If an
+   unconsumed, unrevoked invite exists for the same address, the
+   create endpoint returns a 409 and the admin must resend or revoke
+   the existing one. A revoked row does **not** block re-invite.
 2. **Resend.** `POST /admin/invites/:token/resend`. Allowed only if the
-   invite exists and is not consumed. Updates `expires_at = now+7d`
-   (regardless of prior expiry) and re-sends the same link.
-3. **Revoke.** `POST /admin/invites/:token/revoke`. Deletes the row.
-4. **Landing.** `GET /signup/:token` validates that the token exists, is
-   not consumed, and is not expired. Renders a form whose fields are:
+   invite exists and is neither consumed nor revoked. Updates
+   `expires_at = now+7d` (regardless of prior expiry) and re-sends the
+   same link.
+3. **Revoke.** `POST /admin/invites/:token/revoke`. Soft-delete:
+   `UPDATE invites SET revoked_at = now WHERE token = ? AND revoked_at
+   IS NULL`. The row remains for audit and is rendered in the admin
+   list with Status=Revoked and no actionable buttons. Revoking an
+   already-revoked token surfaces as `ErrNotFound` (zero rows matched
+   the `WHERE`).
+4. **Landing.** `GET /signup/:token` validates that the token exists,
+   is not consumed, not expired, and **not revoked**. Renders a form
+   whose fields are:
    - `email` — pre-filled from the invite row and rendered as a
      **visible, `readonly`** input. The user can see (and copy) the
      address the invite is bound to, but cannot edit it. The field
@@ -433,13 +503,19 @@ contexts.
    - `handle` — validated against the [§8.8 handle policy](#88-handle-policy)
      and against handle-uniqueness.
    - `password` — validated against the [§8.7 password policy](#87-password-policy).
+
+   The signup form deliberately has **no role field**. The invite's
+   `is_admin` is a server-side fact read from the invite row at submit
+   time; a tampered form cannot promote.
 5. **Submit.** `POST /signup/:token` performs everything inside **one
    SQLite transaction**:
-   1. Re-validate the token (exists, not consumed, not expired).
+   1. Re-validate the token (exists, not consumed, not expired, not
+      revoked).
    2. Re-validate that the submitted email equals the invite email
       (case-insensitively, defence against form tampering).
    3. Validate handle and password against §8.7 / §8.8.
-   4. `INSERT INTO users (..., is_admin = 0)`.
+   4. `INSERT INTO users (..., is_admin = invites.is_admin)` — the
+      role comes from the invite row, never from the form.
    5. `UPDATE invites SET consumed_at = now WHERE token = ?`.
    6. Commit.
 
@@ -468,12 +544,13 @@ secrets in logs and URLs).
 | GET      | `/admin/invites`                      | admin  | List + create form.                          |
 | POST     | `/admin/invites`                      | admin  | Create + send.                               |
 | POST     | `/admin/invites/:token/resend`        | admin  | Refresh expiry, re-send.                     |
-| POST     | `/admin/invites/:token/revoke`        | admin  | Delete invite.                               |
+| POST     | `/admin/invites/:token/revoke`        | admin  | Soft-revoke invite (sets `revoked_at`).      |
 | GET      | `/admin/users`                        | admin  | List users.                                  |
 | GET      | `/admin/users/:id`                    | admin  | User detail page.                            |
 | GET      | `/admin/users/:id/edit`               | admin  | User edit form.                              |
-| POST     | `/admin/users/:id/edit`               | admin  | Apply is_admin toggle and/or password reset. |
-| POST     | `/admin/users/:id/delete`             | admin  | Hard-delete user.                            |
+| POST     | `/admin/users/:id/edit`               | admin  | Apply `is_admin` toggle. (Admin-set passwords removed in Sprint 5.) |
+| POST     | `/admin/users/:id/suspend`            | admin  | Soft-suspend user (sets `suspended_at`).     |
+| POST     | `/admin/users/:id/reactivate`         | admin  | Clear `suspended_at`.                        |
 | GET      | `/static/*`                           | public | Embedded assets.                             |
 
 ### 10.1 Root route behaviour
@@ -544,6 +621,13 @@ the named Phase-2 CSS primitive vocabulary (`.huck-shell`, `.huck-sidebar`,
 `.huck-topbar`, `.huck-breadcrumbs`, `.huck-content`, `.huck-page-header`,
 `.huck-form-stack`) are defined in
 [`docs/front-end-plan.md`](front-end-plan.md) and are not duplicated here.
+
+**User-visible labels.** "Administration" is the user-visible label for
+the admin section; "Invitations" is the user-visible label for the
+invitations page. The URL paths remain `/admin` and `/admin/invites`,
+and the Go identifiers (`SectionAdminInvites`, `handleAdminInvitesList`,
+`usersShell`, etc.) are unchanged — only sidebar, breadcrumb, topbar,
+and page-header copy carry the long form.
 
 ## 12. Security headers
 
@@ -637,3 +721,18 @@ design.
   to it. Open question on `ssl_protocols TLSv1.3;` resolved: the
   project will not support incompatible legacy clients, so TLS 1.3
   is pinned with no TLSv1.2 fallback.
+- **2026-05-15** — Sprint 5 lands the "admin tasks" Users + Invitations
+  surface. §7.4 documents the new `users.last_login_at`,
+  `users.suspended_at`, `invites.revoked_at`, and `invites.is_admin`
+  columns (migrations `0002_user_status.sql` / `0003_invite_status.sql`)
+  and the recreated `invites_email_active` partial index that excludes
+  revoked rows. New §8.9 records the login-refuses-suspended-users
+  contract (no new JWT, existing JWTs survive until `exp`, rotate
+  `--jwt-secret` to mass-invalidate). §9 rewritten: invites carry an
+  `is_admin` flag confirmed via a two-step interstitial; revoke is now
+  a soft-delete; signup reads `invites.is_admin` server-side and
+  refuses revoked invites. §10 replaces `POST /admin/users/:id/delete`
+  with `…/suspend` + `…/reactivate`; the edit-route note drops the
+  admin password-reset capability. §11.2 records the "Administration" /
+  "Invitations" user-visible label rename (URL paths and Go
+  identifiers unchanged).
