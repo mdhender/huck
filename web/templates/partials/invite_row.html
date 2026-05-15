@@ -27,6 +27,11 @@
                 <button type="submit" class="contrast">Revoke</button>
             </form>
         {{ end }}
+        {{ if .CanCopy }}
+            <button type="button" class="secondary"
+                    data-invite-url="{{ .Link }}"
+                    aria-label="Copy invite link">Copy invite link</button>
+        {{ end }}
     </td>
 </tr>
 {{- end }}

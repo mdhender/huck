@@ -18,10 +18,11 @@ import (
 
 // inviteRowView is the per-row data shape consumed by both
 // pages/admin_invites.html (in a range) and partials/invite_row.html
-// directly (HTMX swaps after resend). Status uses Invite.Status's
+// directly (HTMX swaps after resend/revoke). Status uses Invite.Status's
 // Pending/Accepted/Expired/Revoked vocabulary (sprint-5 T2.2); the
-// CanResend/CanRevoke gates branch the row's action cell by that
-// status (sprint-5 T5.1).
+// CanResend/CanRevoke/CanCopy gates branch the row's action cell by
+// that status (sprint-5 T5.1, T5.3). Link is the absolute signup URL
+// the Copy-link button writes to the clipboard.
 type inviteRowView struct {
 	Token        string
 	Email        string
@@ -31,8 +32,10 @@ type inviteRowView struct {
 	CreatedAtISO string
 	ExpiresAt    string
 	ExpiresAtISO string
+	Link         string
 	CanResend    bool
 	CanRevoke    bool
+	CanCopy      bool
 }
 
 // adminInvitesView is the data shape consumed by pages/admin_invites.html.
@@ -214,22 +217,30 @@ func (s *Server) handleAdminInvitesResend(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadGateway, "Resend failed at the mail provider.")
 	}
 	if c.Request().Header.Get("HX-Request") == "true" {
-		return c.Render(http.StatusOK, "partials/invite_row.html", rowView(inv))
+		return c.Render(http.StatusOK, "partials/invite_row.html", rowView(inv, s.signupURL(inv)))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/invites")
 }
 
-// handleAdminInvitesRevoke deletes the invite. For HTMX swaps the row
-// disappears (empty body, hx-swap=outerHTML); other requests redirect.
+// handleAdminInvitesRevoke soft-deletes the invite by stamping
+// revoked_at and re-renders the row so it stays visible in the table
+// with Status=Revoked and no row actions (sprint-5 T5.3). Non-HTMX
+// callers get a redirect; on the next render the same row shows up via
+// loadInviteRows in the Revoked state.
 func (s *Server) handleAdminInvitesRevoke(c *echo.Context) error {
 	tok := invites.Token(c.Param("token"))
-	if err := s.invites.Revoke(c.Request().Context(), tok); err != nil {
+	ctx := c.Request().Context()
+	if err := s.invites.Revoke(ctx, tok); err != nil {
 		return err
 	}
-	if c.Request().Header.Get("HX-Request") == "true" {
-		return c.NoContent(http.StatusOK)
+	if c.Request().Header.Get("HX-Request") != "true" {
+		return c.Redirect(http.StatusSeeOther, "/admin/invites")
 	}
-	return c.Redirect(http.StatusSeeOther, "/admin/invites")
+	inv, err := s.invites.GetByToken(ctx, tok)
+	if err != nil {
+		return err
+	}
+	return c.Render(http.StatusOK, "partials/invite_row.html", rowView(inv, s.signupURL(inv)))
 }
 
 // renderAdminInvitesError re-renders the page with a form-level error
@@ -262,7 +273,7 @@ func (s *Server) loadInviteRows(c *echo.Context) ([]inviteRowView, error) {
 	now := time.Now().UTC()
 	out := make([]inviteRowView, 0, len(all))
 	for _, inv := range all {
-		out = append(out, rowViewAt(inv, now))
+		out = append(out, rowViewAt(inv, now, s.signupURL(inv)))
 	}
 	return out, nil
 }
@@ -277,16 +288,17 @@ func (s *Server) signupURL(inv invites.Invite) string {
 }
 
 // rowView is rowViewAt with time.Now() supplied; convenient for callers
-// that only render a single row (resend swaps).
-func rowView(inv invites.Invite) inviteRowView {
-	return rowViewAt(inv, time.Now().UTC())
+// that only render a single row (resend / revoke HTMX swaps).
+func rowView(inv invites.Invite, link string) inviteRowView {
+	return rowViewAt(inv, time.Now().UTC(), link)
 }
 
-func rowViewAt(inv invites.Invite, now time.Time) inviteRowView {
+func rowViewAt(inv invites.Invite, now time.Time, link string) inviteRowView {
 	status := inv.Status(now)
 	// Pending and Expired invites are still actionable (Resend extends
 	// expiry); Accepted and Revoked invites stay in the list for audit
-	// with no row actions (sprint-5 T5.1).
+	// with no row actions — including Copy link, which T5.1 lists only
+	// for actionable rows (sprint-5 T5.1, T5.3).
 	actionable := status == invites.StatusPending || status == invites.StatusExpired
 	role := "User"
 	if inv.IsAdmin {
@@ -303,7 +315,9 @@ func rowViewAt(inv invites.Invite, now time.Time) inviteRowView {
 		CreatedAtISO: createdAtISO,
 		ExpiresAt:    expiresAt,
 		ExpiresAtISO: expiresAtISO,
+		Link:         link,
 		CanResend:    actionable,
 		CanRevoke:    actionable,
+		CanCopy:      actionable,
 	}
 }

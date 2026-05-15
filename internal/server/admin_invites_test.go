@@ -639,12 +639,95 @@ func TestAdminInvitesRevoke(t *testing.T) {
 		t.Fatalf("status: got %d, want 200", resp.StatusCode)
 	}
 
-	got, err := f.invitesStore.GetByToken(context.Background(), inv.Token)
+	// HTMX swap must carry the revoked row markup so the row stays
+	// visible with Status=Revoked and no Resend/Revoke/Copy actions
+	// (sprint-5 T5.3) — not an empty body.
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	if !strings.Contains(got, `id="invite-`+inv.Token.String()+`"`) {
+		t.Errorf("HTMX revoke response should include row id; body=%s", trim(got))
+	}
+	if !strings.Contains(got, `<td>Revoked</td>`) {
+		t.Errorf("HTMX revoke response should show Status=Revoked; body=%s", trim(got))
+	}
+	if strings.Contains(got, ">Resend<") {
+		t.Errorf("HTMX revoke response should not show Resend; body=%s", trim(got))
+	}
+	if strings.Contains(got, ">Revoke<") {
+		t.Errorf("HTMX revoke response should not show Revoke; body=%s", trim(got))
+	}
+	if strings.Contains(got, "data-invite-url=") {
+		t.Errorf("HTMX revoke response should not show Copy-link button; body=%s", trim(got))
+	}
+
+	stored, err := f.invitesStore.GetByToken(context.Background(), inv.Token)
 	if err != nil {
 		t.Fatalf("after revoke GetByToken: %v", err)
 	}
-	if !got.Revoked() {
-		t.Errorf("after revoke want revoked_at set, got %+v", got)
+	if !stored.Revoked() {
+		t.Errorf("after revoke want revoked_at set, got %+v", stored)
+	}
+}
+
+// TestAdminInvitesCopyLink pins sprint-5 T5.3's Copy-link button. The
+// data-invite-url attribute on a Pending row must equal
+// ${BASE_URL}/signup/<token>?email=<urlencoded-email>, mirroring what
+// the invite mail body carries.
+func TestAdminInvitesCopyLink(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email: "copylink+plus@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("seed invite: %v", err)
+	}
+
+	client := f.adminClient(t)
+	body := getBody(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
+
+	row := extractInviteRow(t, body, inv.Token.String())
+	wantURL := "http://huck.test/signup/" + inv.Token.String() +
+		"?email=" + url.QueryEscape("copylink+plus@example.com")
+	wantAttr := `data-invite-url="` + wantURL + `"`
+	if !strings.Contains(row, wantAttr) {
+		t.Errorf("missing %s; row=%s", wantAttr, trim(row))
+	}
+	if !strings.Contains(row, "Copy invite link") {
+		t.Errorf("missing Copy-link button label; row=%s", trim(row))
+	}
+}
+
+// TestAdminInvitesRevokedRowOmitsCopy pins sprint-5 T5.1+T5.3: revoked
+// rows render in the list with no Resend/Revoke/Copy buttons.
+func TestAdminInvitesRevokedRowOmitsCopy(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	inv, err := f.invitesStore.Create(context.Background(), invites.NewInvite{
+		Email: "ghost@example.com", InvitedBy: f.admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("seed invite: %v", err)
+	}
+	if err := f.invitesStore.Revoke(context.Background(), inv.Token); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	client := f.adminClient(t)
+	body := getBody(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
+	row := extractInviteRow(t, body, inv.Token.String())
+
+	if !strings.Contains(row, `<td>Revoked</td>`) {
+		t.Errorf("revoked row missing Status=Revoked; row=%s", trim(row))
+	}
+	if strings.Contains(row, "data-invite-url=") {
+		t.Errorf("revoked row should not expose Copy-link button; row=%s", trim(row))
+	}
+	if strings.Contains(row, ">Resend<") {
+		t.Errorf("revoked row should not show Resend; row=%s", trim(row))
+	}
+	if strings.Contains(row, ">Revoke<") {
+		t.Errorf("revoked row should not show Revoke; row=%s", trim(row))
 	}
 }
 

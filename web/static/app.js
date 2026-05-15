@@ -56,3 +56,28 @@
         }
     });
 })();
+
+// Copy-link buttons (sprint-5 T5.3). A button with `data-invite-url="…"`
+// copies that URL to the clipboard and briefly flips its visible text to
+// "Copied". Kept here (not Alpine) because our CSP is `script-src 'self'`
+// — no `unsafe-eval`, which Alpine's directive evaluator needs.
+(function () {
+    const COPIED_MS = 1500;
+    document.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-invite-url]");
+        if (!btn) return;
+        e.preventDefault();
+        const url = btn.dataset.inviteUrl;
+        if (!url || !navigator.clipboard) return;
+        navigator.clipboard.writeText(url).then(function () {
+            if (btn.dataset.huckCopying === "1") return;
+            const original = btn.textContent;
+            btn.dataset.huckCopying = "1";
+            btn.textContent = "Copied";
+            window.setTimeout(function () {
+                btn.textContent = original;
+                delete btn.dataset.huckCopying;
+            }, COPIED_MS);
+        });
+    });
+})();
