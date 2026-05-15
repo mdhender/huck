@@ -1,0 +1,23 @@
+{{ define "title" }}huck — confirm admin invitation{{ end }}
+
+{{ define "content" }}
+<header class="huck-page-header">
+    <h1>Confirm admin invitation</h1>
+</header>
+
+<article>
+    <p>
+        You are about to send an invitation that will create an
+        <strong>administrator</strong> account for <code>{{ .Email }}</code>.
+    </p>
+    <form method="post" action="/admin/invites" class="huck-form-stack">
+        <input type="hidden" name="email" value="{{ .Email }}">
+        <input type="hidden" name="role" value="admin">
+        <input type="hidden" name="confirm" value="true">
+        <div>
+            <button type="submit">Send admin invitation</button>
+            <a href="/admin/invites" role="button" class="secondary">Cancel</a>
+        </div>
+    </form>
+</article>
+{{ end }}

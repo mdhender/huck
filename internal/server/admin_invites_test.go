@@ -338,6 +338,7 @@ func TestAdminInvitesCreate(t *testing.T) {
 
 	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
 		"email": {"  Newcomer@Example.COM "},
+		"role":  {"user"},
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -356,6 +357,9 @@ func TestAdminInvitesCreate(t *testing.T) {
 	if got[0].Email != "newcomer@example.com" {
 		t.Errorf("email = %q, want lowercased", got[0].Email)
 	}
+	if got[0].IsAdmin {
+		t.Errorf("IsAdmin = true, want false for role=user")
+	}
 
 	// Mail captured by the fake mailer.
 	sent := f.mailer.Sent()
@@ -373,6 +377,131 @@ func TestAdminInvitesCreate(t *testing.T) {
 	}
 	if !strings.Contains(sent[0].HTMLBody, "newcomer%40example.com") {
 		t.Errorf("body missing url-encoded email; body=%s", trim(sent[0].HTMLBody))
+	}
+}
+
+// TestAdminInvitesCreateAdminNeedsConfirm pins sprint-5 T5.2's two-step
+// admin path: a first POST with role=admin and no confirm renders the
+// interstitial confirmation page; no invite row is written and no mail
+// is sent.
+func TestAdminInvitesCreateAdminNeedsConfirm(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	client := f.adminClient(t)
+
+	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
+
+	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
+		"email": {"newadmin@example.com"},
+		"role":  {"admin"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want 200; body=%s", resp.StatusCode, trim(string(body)))
+	}
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	if !strings.Contains(got, "Confirm admin invitation") {
+		t.Errorf("missing confirm page heading; body=%s", trim(got))
+	}
+	if !strings.Contains(got, "newadmin@example.com") {
+		t.Errorf("confirm page missing normalised email; body=%s", trim(got))
+	}
+	if !strings.Contains(got, `name="confirm" value="true"`) {
+		t.Errorf("confirm page missing hidden confirm=true; body=%s", trim(got))
+	}
+	if !strings.Contains(got, `name="role" value="admin"`) {
+		t.Errorf("confirm page missing hidden role=admin; body=%s", trim(got))
+	}
+
+	// No DB write, no mail.
+	rows, err := f.invitesStore.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("invite count = %d, want 0 (confirm step is non-destructive)", len(rows))
+	}
+	if n := len(f.mailer.Sent()); n != 0 {
+		t.Errorf("messages sent = %d, want 0 (confirm step is non-destructive)", n)
+	}
+}
+
+// TestAdminInvitesCreateAdminConfirmed pins sprint-5 T5.2's second
+// step: a POST with role=admin and confirm=true creates an admin
+// invite (is_admin=1) and sends mail.
+func TestAdminInvitesCreateAdminConfirmed(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	client := f.adminClient(t)
+
+	mustGet(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
+
+	resp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
+		"email":   {"newadmin@example.com"},
+		"role":    {"admin"},
+		"confirm": {"true"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status: got %d, want 200; body=%s", resp.StatusCode, trim(string(body)))
+	}
+
+	rows, err := f.invitesStore.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("invite count = %d, want 1", len(rows))
+	}
+	if rows[0].Email != "newadmin@example.com" {
+		t.Errorf("email = %q, want newadmin@example.com", rows[0].Email)
+	}
+	if !rows[0].IsAdmin {
+		t.Errorf("IsAdmin = false, want true for confirmed admin invite")
+	}
+	if n := len(f.mailer.Sent()); n != 1 {
+		t.Errorf("messages sent = %d, want 1", n)
+	}
+}
+
+// TestAdminInvitesCreateRoleSelector pins that the create form renders
+// the Role fieldset with User (default) and Admin radios so the
+// interstitial can be triggered from the UI.
+func TestAdminInvitesCreateRoleSelector(t *testing.T) {
+	t.Parallel()
+	f := newAdminFixture(t)
+	client := f.adminClient(t)
+
+	body := getBody(t, client, f.ts.URL+"/admin/invites", http.StatusOK)
+	if !strings.Contains(body, "<legend>Role</legend>") {
+		t.Errorf("missing Role <legend>; body=%s", trim(body))
+	}
+	if !strings.Contains(body, `name="role" value="user"`) {
+		t.Errorf("missing role=user radio; body=%s", trim(body))
+	}
+	if !strings.Contains(body, `name="role" value="admin"`) {
+		t.Errorf("missing role=admin radio; body=%s", trim(body))
+	}
+	// User is the default-checked option.
+	userIdx := strings.Index(body, `name="role" value="user"`)
+	if userIdx < 0 {
+		t.Fatalf("user radio absent")
+	}
+	// Look at the radio's enclosing <input ...> tag for `checked`.
+	radioStart := strings.LastIndex(body[:userIdx], "<input")
+	if radioStart < 0 {
+		t.Fatalf("could not locate <input start for user radio")
+	}
+	radioEnd := strings.Index(body[radioStart:], ">")
+	if radioEnd < 0 {
+		t.Fatalf("could not locate <input end for user radio")
+	}
+	if !strings.Contains(body[radioStart:radioStart+radioEnd], "checked") {
+		t.Errorf("user radio is not checked by default; tag=%s",
+			body[radioStart:radioStart+radioEnd])
 	}
 }
 

@@ -19,6 +19,19 @@
                    value="{{ .FormEmail }}"
                    placeholder="newuser@example.com">
         </label>
+        <fieldset>
+            <legend>Role</legend>
+            <label>
+                <input type="radio" name="role" value="user"
+                       {{ if not (eq .FormRole "admin") }}checked{{ end }}>
+                User
+            </label>
+            <label>
+                <input type="radio" name="role" value="admin"
+                       {{ if eq .FormRole "admin" }}checked{{ end }}>
+                Admin
+            </label>
+        </fieldset>
         <button type="submit">Send invite</button>
     </form>
 </article>

@@ -55,11 +55,12 @@ var pageLayouts = map[string]string{
 	"pages/error.html":           layoutAuth,
 	"pages/home_authed.html":     layoutApp,
 	"pages/account.html":         layoutApp,
-	"pages/admin.html":           layoutApp,
-	"pages/admin_invites.html":   layoutApp,
-	"pages/admin_users.html":     layoutApp,
-	"pages/admin_user_view.html": layoutApp,
-	"pages/admin_user_edit.html": layoutApp,
+	"pages/admin.html":                layoutApp,
+	"pages/admin_invites.html":        layoutApp,
+	"pages/admin_invite_confirm.html": layoutApp,
+	"pages/admin_users.html":          layoutApp,
+	"pages/admin_user_view.html":      layoutApp,
+	"pages/admin_user_edit.html":      layoutApp,
 }
 
 // NewRenderer builds the renderer from the embedded template FS.

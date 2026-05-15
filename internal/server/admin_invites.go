@@ -40,9 +40,20 @@ type inviteRowView struct {
 // the page-only view no longer carries the signed-in handle.
 type adminInvitesView struct {
 	FormEmail string
+	FormRole  string
 	Error     string
 	Notice    string
 	Rows      []inviteRowView
+}
+
+// adminInviteConfirmView is the data shape consumed by
+// pages/admin_invite_confirm.html — the interstitial step that gates
+// admin-invite creation behind a confirm POST (sprint-5 T5.2). The
+// values are already normalised; the template re-posts them as hidden
+// fields with confirm=true.
+type adminInviteConfirmView struct {
+	Email string
+	Role  string
 }
 
 // invitesShell builds the app-shell context for any /admin/invites
@@ -94,11 +105,33 @@ func (s *Server) handleAdminInvitesList(c *echo.Context) error {
 // handleAdminInvitesCreate creates an invite + sends the welcome email
 // inside one sqlitex.Transaction. A Mailgun failure rolls the row back
 // and the response is 5xx so the admin sees the failure (sprint-2.md T6).
+//
+// Admin invites take a two-step path (sprint-5 T5.2 / DESIGN.md §9):
+// a first POST without confirm=true renders an interstitial that
+// re-posts the normalised values with confirm=true; only the second
+// POST actually creates the row and sends mail. The signup form
+// reads invites.is_admin server-side, so a tampered POST that sets
+// role=admin without the prior interstitial cannot promote — the
+// invite was created with IsAdmin: false.
 func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 	claims := currentClaims(c)
 	email := users.Normalise(c.FormValue("email"))
+	role := c.FormValue("role")
+	if role != "admin" {
+		role = "user"
+	}
+	confirm := c.FormValue("confirm") == "true"
+
 	if email == "" {
-		return s.renderAdminInvitesError(c, claims, email, "Email is required.", http.StatusUnprocessableEntity)
+		return s.renderAdminInvitesError(c, claims, email, role,
+			"Email is required.", http.StatusUnprocessableEntity)
+	}
+
+	if role == "admin" && !confirm {
+		return c.Render(http.StatusOK, "pages/admin_invite_confirm.html", AppPage{
+			Page:  adminInviteConfirmView{Email: email, Role: role},
+			Shell: invitesShell(claims),
+		})
 	}
 
 	conn, err := s.pool.Take(c.Request().Context())
@@ -115,6 +148,7 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 		inv, err := s.invites.CreateOnConn(conn, invites.NewInvite{
 			Email:     email,
 			InvitedBy: claims.UserID(),
+			IsAdmin:   role == "admin",
 		})
 		if err != nil {
 			return err
@@ -136,7 +170,7 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 	if txErr != nil {
 		switch {
 		case errors.Is(txErr, invites.ErrEmailAlreadyInvited):
-			return s.renderAdminInvitesError(c, claims, email,
+			return s.renderAdminInvitesError(c, claims, email, role,
 				"That email already has an active invite. Revoke it first or wait for it to be consumed.",
 				http.StatusConflict)
 		default:
@@ -199,8 +233,9 @@ func (s *Server) handleAdminInvitesRevoke(c *echo.Context) error {
 }
 
 // renderAdminInvitesError re-renders the page with a form-level error
-// banner. Used for validation + duplicate-active-invite (409).
-func (s *Server) renderAdminInvitesError(c *echo.Context, claims *auth.Claims, email, msg string, status int) error {
+// banner. Used for validation + duplicate-active-invite (409). FormRole
+// is echoed back so the admin's role selection survives the error.
+func (s *Server) renderAdminInvitesError(c *echo.Context, claims *auth.Claims, email, role, msg string, status int) error {
 	rows, err := s.loadInviteRows(c)
 	if err != nil {
 		return err
@@ -208,6 +243,7 @@ func (s *Server) renderAdminInvitesError(c *echo.Context, claims *auth.Claims, e
 	return c.Render(status, "pages/admin_invites.html", AppPage{
 		Page: adminInvitesView{
 			FormEmail: email,
+			FormRole:  role,
 			Error:     msg,
 			Rows:      rows,
 		},
