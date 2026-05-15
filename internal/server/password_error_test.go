@@ -32,19 +32,6 @@ func TestPasswordErrMsg(t *testing.T) {
 	}
 }
 
-func TestAdminUserPasswordErrorMessageDelegates(t *testing.T) {
-	// password sentinels go through passwordErrMsg, everything else
-	// falls back to the admin-specific generic message.
-	if got, want := adminUserPasswordErrorMessage(auth.ErrPasswordTooShort),
-		fmt.Sprintf("Password must be at least %d characters.", auth.MinPasswordLen); got != want {
-		t.Errorf("sentinel: got %q, want %q", got, want)
-	}
-	if got, want := adminUserPasswordErrorMessage(errors.New("boom")),
-		"Password is invalid."; got != want {
-		t.Errorf("fallback: got %q, want %q", got, want)
-	}
-}
-
 func TestSignupErrorMessageDelegates(t *testing.T) {
 	// password sentinels go through passwordErrMsg, the signup-specific
 	// switch still handles the other cases.

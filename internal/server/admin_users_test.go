@@ -172,8 +172,8 @@ func TestAdminUsersEditForm(t *testing.T) {
 	if !strings.Contains(body, `name="is_admin"`) {
 		t.Errorf("edit form missing is_admin checkbox; body=%s", trim(body))
 	}
-	if !strings.Contains(body, `name="password"`) {
-		t.Errorf("edit form missing password input; body=%s", trim(body))
+	if strings.Contains(body, `name="password"`) {
+		t.Errorf("edit form still carries password input; body=%s", trim(body))
 	}
 }
 
@@ -200,55 +200,35 @@ func TestAdminUsersEditPromote(t *testing.T) {
 	}
 }
 
-func TestAdminUsersEditResetPassword(t *testing.T) {
+// TestAdminUsersEditIgnoresPassword pins that the admin edit endpoint no
+// longer accepts a password reset. A tampered POST that includes a
+// password form value must not change the stored hash — Sprint 5 T4.3
+// removed admin-set passwords; recovery is out-of-band until a real
+// password-reset flow lands.
+func TestAdminUsersEditIgnoresPassword(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
 	client := f.adminClient(t)
 	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
 
-	const newPassword = "rotateMyKeysNow"
 	resp := mustPost(t, client,
 		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/edit",
-		url.Values{"password": {newPassword}})
+		url.Values{"password": {"rotateMyKeysNow"}})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("status: got %d, want 303", resp.StatusCode)
-	}
-
-	got, err := f.usersStore.GetByID(context.Background(), f.user.ID)
-	if err != nil {
-		t.Fatalf("GetByID: %v", err)
-	}
-	if err := auth.Verify(got.PasswordHash, newPassword); err != nil {
-		t.Errorf("new password does not verify: %v", err)
-	}
-	if err := auth.Verify(got.PasswordHash, adminPassword); !errors.Is(err, auth.ErrBadPassword) {
-		t.Errorf("old password should no longer verify, got %v", err)
-	}
-}
-
-func TestAdminUsersEditWeakPassword(t *testing.T) {
-	t.Parallel()
-	f := newAdminFixture(t)
-	client := f.adminClient(t)
-	mustGet(t, client, f.ts.URL+"/admin/users", http.StatusOK)
-
-	resp := mustPost(t, client,
-		f.ts.URL+"/admin/users/"+strconv.FormatInt(f.user.ID, 10)+"/edit",
-		url.Values{"password": {"short"}})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnprocessableEntity {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status: got %d, want 422; body=%s", resp.StatusCode, trim(string(body)))
+		t.Fatalf("status: got %d, want 303; body=%s", resp.StatusCode, trim(string(body)))
 	}
 
-	// Password unchanged: original still verifies.
 	got, err := f.usersStore.GetByID(context.Background(), f.user.ID)
 	if err != nil {
 		t.Fatalf("GetByID: %v", err)
 	}
 	if err := auth.Verify(got.PasswordHash, adminPassword); err != nil {
 		t.Errorf("password should be unchanged, original no longer verifies: %v", err)
+	}
+	if err := auth.Verify(got.PasswordHash, "rotateMyKeysNow"); !errors.Is(err, auth.ErrBadPassword) {
+		t.Errorf("submitted password leaked into hash: %v", err)
 	}
 }
 

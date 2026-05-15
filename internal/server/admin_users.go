@@ -227,23 +227,8 @@ func (s *Server) handleAdminUsersEditSubmit(c *echo.Context) error {
 			http.StatusForbidden)
 	}
 
-	password := c.FormValue("password")
-
 	if u.IsAdmin != wantAdmin {
 		if err := s.users.SetAdmin(ctx, id, wantAdmin); err != nil {
-			return err
-		}
-	}
-	if password != "" {
-		if err := auth.ValidatePassword(password); err != nil {
-			return s.renderAdminUserEditError(c, claims, u,
-				adminUserPasswordErrorMessage(err), http.StatusUnprocessableEntity)
-		}
-		hash, err := auth.Hash(password)
-		if err != nil {
-			return err
-		}
-		if err := s.users.SetPassword(ctx, id, hash); err != nil {
 			return err
 		}
 	}
@@ -332,14 +317,4 @@ func parseUserID(c *echo.Context) (int64, error) {
 		return 0, echo.NewHTTPError(http.StatusBadRequest, "Invalid user id.")
 	}
 	return id, nil
-}
-
-// adminUserPasswordErrorMessage maps a password-validator error to a
-// short message naming the rule that failed. Falls back to a generic
-// message for unexpected errors so we never leak internals.
-func adminUserPasswordErrorMessage(err error) string {
-	if msg := passwordErrMsg(err); msg != "" {
-		return msg
-	}
-	return "Password is invalid."
 }

@@ -36,16 +36,6 @@
             {{ end }}
         </fieldset>
 
-        <fieldset>
-            <legend>Reset password</legend>
-            <label>
-                New password
-                <input type="password" name="password" autocomplete="new-password"
-                       placeholder="Leave blank to keep current password">
-            </label>
-            <small>12–128 characters. Leave blank to keep the current password.</small>
-        </fieldset>
-
         <div>
             <button type="submit">Save changes</button>
             <a href="/admin/users/{{ .User.ID }}" role="button" class="secondary">Cancel</a>

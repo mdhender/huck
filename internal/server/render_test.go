@@ -691,7 +691,6 @@ func TestAdminUsersEditRendersAppShell(t *testing.T) {
 		`class="huck-form-stack"`,
 		// Page body still receives the original adminUserView as dot.
 		`name="is_admin"`,
-		`name="password"`,
 		// Topbar carries the signed-in handle.
 		`<em>admin</em>`,
 		// Breadcrumb: Home / Admin / Users / <handle> link back; Edit is current.
@@ -713,6 +712,9 @@ func TestAdminUsersEditRendersAppShell(t *testing.T) {
 	for _, bad := range []string{
 		`<li><strong>huck</strong></li>`,
 		`class="inline"`,
+		// Sprint 5 T4.3 removed admin-set passwords; the edit form must
+		// not carry a password input.
+		`name="password"`,
 	} {
 		if strings.Contains(out, bad) {
 			t.Errorf("output should not contain %q\n--- output ---\n%s", bad, out)
