@@ -142,6 +142,29 @@ Before starting T1.1, confirm:
    game-engine domain mounts URLs under `/games/<slug>/…`.
 9. **No game-engine routes, no player-facing surfaces.** Sprint 6
    is admin-only.
+10. **Conventions inherited from the Sprint-5 preflight cleanup**
+    (`docs/sprint-5-review.md`, commits `81e9bcf` + `c2ea23b`).
+    `internal/games` must follow them from day one — do **not**
+    recreate the helpers or sprinkle inline literals:
+    - Import `internal/dbx` for `BoolToInt`, `ParseTime`, and
+      `NowISO`. Do not redefine local copies.
+    - Export package status constants (`games.StatusSetup`,
+      `StatusActive`, `StatusPaused`, `StatusArchived`) — same
+      pattern as `users.StatusActive`/`StatusSuspended` and
+      `invites.StatusPending` etc. Handlers and templates pin the
+      rendered text; no inline string literals in handler code.
+    - Soft-delete methods (`games.Store.Archive`,
+      `members.Store.RemoveMember`) must be idempotent: existence
+      pre-check + conditional `UPDATE … WHERE … AND archived_at IS
+      NULL` (or `is_active = 1`), mirroring `users.Store.Suspend`
+      and `invites.Store.Revoke`. Re-archiving an archived game
+      returns `nil`; `ErrNotFound` is reserved for ids that do
+      not exist.
+    - No network I/O inside a SQLite write transaction. (Sprint 6
+      doesn't introduce any mail flows; this rule is for the next
+      agent who's tempted.)
+    - Handlers branch on HTMX via `isHXFragmentRequest(c)`, never
+      a raw `Header.Get("HX-Request") == "true"` check.
 
 ---
 
