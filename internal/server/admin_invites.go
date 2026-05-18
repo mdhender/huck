@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v5"
-	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/mdhender/huck/internal/auth"
 	"github.com/mdhender/huck/internal/invites"
@@ -105,9 +105,17 @@ func (s *Server) handleAdminInvitesList(c *echo.Context) error {
 	})
 }
 
-// handleAdminInvitesCreate creates an invite + sends the welcome email
-// inside one sqlitex.Transaction. A Mailgun failure rolls the row back
-// and the response is 5xx so the admin sees the failure (sprint-2.md T6).
+// handleAdminInvitesCreate creates an invite and sends the welcome
+// email. The mail send happens OUTSIDE any SQLite write transaction so
+// Mailgun latency does not block other writers (SQLite is single-writer
+// and our prior in-transaction send serialised every concurrent write
+// behind the Mailgun round-trip — sprint-5-review.md H1).
+//
+// Mail-failure semantics: if the Mailgun call fails after the row was
+// inserted, we Revoke the new invite (soft-delete) and surface 5xx so
+// the admin sees the failure. The revoked row stays for audit; the
+// partial unique index excludes revoked rows, so a retry with the same
+// email succeeds immediately (sprint-5 T2.1 partial-index predicate).
 //
 // Admin invites take a two-step path (sprint-5 T5.2 / DESIGN.md §9):
 // a first POST without confirm=true renders an interstitial that
@@ -137,50 +145,36 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 		})
 	}
 
-	conn, err := s.pool.Take(c.Request().Context())
+	ctx := c.Request().Context()
+	created, err := s.invites.Create(ctx, invites.NewInvite{
+		Email:     email,
+		InvitedBy: claims.UserID(),
+		IsAdmin:   role == "admin",
+	})
 	if err != nil {
-		return err
-	}
-	defer s.pool.Put(conn)
-
-	var created invites.Invite
-	txErr := func() (txErr error) {
-		end := sqlitex.Transaction(conn)
-		defer end(&txErr)
-
-		inv, err := s.invites.CreateOnConn(conn, invites.NewInvite{
-			Email:     email,
-			InvitedBy: claims.UserID(),
-			IsAdmin:   role == "admin",
-		})
-		if err != nil {
-			return err
-		}
-		body, err := s.renderer.RenderEmail("email/invite.html", inviteEmailView{
-			Email: inv.Email,
-			URL:   s.signupURL(inv),
-		})
-		if err != nil {
-			return err
-		}
-		if err := s.mailer.Send(c.Request().Context(), inv.Email, inviteEmailSubject, body); err != nil {
-			return fmt.Errorf("send invite mail: %w", err)
-		}
-		created = inv
-		return nil
-	}()
-
-	if txErr != nil {
-		switch {
-		case errors.Is(txErr, invites.ErrEmailAlreadyInvited):
+		if errors.Is(err, invites.ErrEmailAlreadyInvited) {
 			return s.renderAdminInvitesError(c, claims, email, role,
 				"That email already has an active invite. Revoke it first or wait for it to be consumed.",
 				http.StatusConflict)
-		default:
-			s.logger.Error("admin invite create failed", "err", txErr, "email", email)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				"Could not send the invite. The row was rolled back; please try again.")
 		}
+		s.logger.Error("admin invite create failed", "err", err, "email", email)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			"Could not create the invite. Please try again.")
+	}
+
+	body, err := s.renderer.RenderEmail("email/invite.html", inviteEmailView{
+		Email: created.Email,
+		URL:   s.signupURL(created),
+	})
+	if err != nil {
+		s.revokeAfterMailFailure(ctx, created.Token, "render invite mail", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			"Could not render the invite mail. The pending invite has been revoked; please try again.")
+	}
+	if err := s.mailer.Send(ctx, created.Email, inviteEmailSubject, body); err != nil {
+		s.revokeAfterMailFailure(ctx, created.Token, "send invite mail", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			"Could not send the invite. The pending invite has been revoked; please try again.")
 	}
 
 	rows, err := s.loadInviteRows(c)
@@ -194,6 +188,22 @@ func (s *Server) handleAdminInvitesCreate(c *echo.Context) error {
 		},
 		Shell: invitesShell(claims),
 	})
+}
+
+// revokeAfterMailFailure soft-deletes a freshly-created invite whose
+// follow-up mail step failed. Errors during the revoke are logged but
+// not surfaced — the caller is already returning a 5xx for the original
+// mail failure. A failed revoke leaves a Pending row that an admin can
+// revoke manually; the partial unique index keeps blocking retries for
+// the same email until that happens, which is a loud signal something
+// went wrong.
+func (s *Server) revokeAfterMailFailure(ctx context.Context, tok invites.Token, stage string, cause error) {
+	s.logger.Error("admin invite "+stage+" failed",
+		"err", cause, "token", tok.String())
+	if rerr := s.invites.Revoke(ctx, tok); rerr != nil {
+		s.logger.Error("admin invite revoke after mail failure failed",
+			"err", rerr, "token", tok.String())
+	}
 }
 
 // handleAdminInvitesResend refreshes the invite's expires_at and re-sends

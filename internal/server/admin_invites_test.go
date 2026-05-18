@@ -542,7 +542,13 @@ func TestAdminInvitesCreateDuplicate409(t *testing.T) {
 	}
 }
 
-func TestAdminInvitesCreateMailgunFailureRollsBack(t *testing.T) {
+// TestAdminInvitesCreateMailgunFailureRevokesInvite covers sprint-5
+// review H1: the mail send happens outside any SQLite write transaction
+// so Mailgun latency cannot serialise concurrent writers. On send
+// failure the freshly-created row is soft-revoked, the admin sees 5xx,
+// and a retry against the same email succeeds because the partial
+// unique index excludes revoked rows.
+func TestAdminInvitesCreateMailgunFailureRevokesInvite(t *testing.T) {
 	t.Parallel()
 	f := newAdminFixture(t)
 	f.mailer.SendErr = errors.New("mailgun is down")
@@ -558,13 +564,41 @@ func TestAdminInvitesCreateMailgunFailureRollsBack(t *testing.T) {
 		t.Fatalf("status: got %d, want 5xx", resp.StatusCode)
 	}
 
-	// The transaction must have rolled back: no invite row.
-	got, err := f.invitesStore.ListAll(context.Background())
+	// The row stays in the table as Revoked (soft-delete) so the audit
+	// trail is honest and the partial index allows a retry for the same
+	// email.
+	ctx := context.Background()
+	got, err := f.invitesStore.ListAll(ctx)
 	if err != nil {
 		t.Fatalf("ListAll: %v", err)
 	}
-	if len(got) != 0 {
-		t.Errorf("invites after mail failure = %d, want 0 (rollback)", len(got))
+	if len(got) != 1 {
+		t.Fatalf("invites after mail failure = %d, want 1 (revoked row)", len(got))
+	}
+	if !got[0].Revoked() {
+		t.Errorf("invite after mail failure must be revoked, got %+v", got[0])
+	}
+	if got[0].Email != "willfail@example.com" {
+		t.Errorf("invite email: got %q, want willfail@example.com", got[0].Email)
+	}
+
+	// Retry with mail working: the same email must succeed (the partial
+	// unique index excludes revoked rows).
+	f.mailer.SendErr = nil
+	retryResp := mustPost(t, client, f.ts.URL+"/admin/invites", url.Values{
+		"email": {"willfail@example.com"},
+	})
+	defer retryResp.Body.Close()
+	if retryResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(retryResp.Body)
+		t.Fatalf("retry status: got %d, want 200; body=%s", retryResp.StatusCode, trim(string(body)))
+	}
+	after, err := f.invitesStore.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll after retry: %v", err)
+	}
+	if len(after) != 2 {
+		t.Errorf("invites after retry = %d, want 2 (revoked + pending)", len(after))
 	}
 }
 

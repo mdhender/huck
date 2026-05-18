@@ -356,7 +356,8 @@ func TestResendNotFound(t *testing.T) {
 
 // TestRevoke covers the soft-revoke contract: the row stays in the
 // table with revoked_at set, GetByToken still returns it, and a second
-// Revoke is idempotent at the caller surface (returns ErrNotFound).
+// Revoke on the same token is idempotent (returns nil). ErrNotFound is
+// reserved for genuinely missing tokens — see TestRevokeMissing.
 func TestRevoke(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -378,8 +379,36 @@ func TestRevoke(t *testing.T) {
 	if !got.Revoked() {
 		t.Errorf("expected revoked_at to be set, got %+v", got)
 	}
-	if err := f.store.Revoke(ctx, inv.Token); !errors.Is(err, invites.ErrNotFound) {
-		t.Fatalf("second Revoke want ErrNotFound, got %v", err)
+	firstRevokedAt := got.RevokedAt
+	if err := f.store.Revoke(ctx, inv.Token); err != nil {
+		t.Fatalf("second Revoke (idempotent): want nil, got %v", err)
+	}
+	// The conditional UPDATE skipped the already-revoked row, so
+	// revoked_at must not have moved.
+	got2, err := f.store.GetByToken(ctx, inv.Token)
+	if err != nil {
+		t.Fatalf("after second Revoke, GetByToken: %v", err)
+	}
+	if !got2.RevokedAt.Equal(firstRevokedAt) {
+		t.Errorf("second Revoke moved revoked_at: was %v, now %v", firstRevokedAt, got2.RevokedAt)
+	}
+}
+
+// TestRevokeMissing pins that Revoke returns ErrNotFound only when the
+// token does not exist at all — distinguishing "missing" from "already
+// revoked" at the caller surface. See TestRevoke for the idempotency
+// case.
+func TestRevokeMissing(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := context.Background()
+
+	missing, err := invites.Generate()
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if err := f.store.Revoke(ctx, missing); !errors.Is(err, invites.ErrNotFound) {
+		t.Fatalf("Revoke(missing) want ErrNotFound, got %v", err)
 	}
 }
 

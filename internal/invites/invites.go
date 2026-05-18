@@ -255,9 +255,12 @@ func (s *Store) Resend(ctx context.Context, t Token) (Invite, error) {
 
 // Revoke soft-deletes the invite by stamping revoked_at. The row stays
 // for audit; the partial unique index excludes revoked rows so a fresh
-// Create for the same email succeeds afterwards. Returns ErrNotFound
-// when no row matches or the row is already revoked (idempotent at the
-// caller surface).
+// Create for the same email succeeds afterwards.
+//
+// Idempotent: calling Revoke on an already-revoked token returns nil.
+// ErrNotFound is reserved for tokens that do not exist at all. This
+// mirrors users.Store.Suspend and matches the soft-delete idempotency
+// rule shared with future store methods (e.g. games.Store.Archive).
 func (s *Store) Revoke(ctx context.Context, t Token) error {
 	conn, err := s.pool.Take(ctx)
 	if err != nil {
@@ -265,16 +268,37 @@ func (s *Store) Revoke(ctx context.Context, t Token) error {
 	}
 	defer s.pool.Put(conn)
 
+	exists, err := tokenExists(conn, t)
+	if err != nil {
+		return fmt.Errorf("invites: revoke: %w", err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if err := sqlitex.Execute(conn,
 		`UPDATE invites SET revoked_at = ? WHERE token = ? AND revoked_at IS NULL;`,
 		&sqlitex.ExecOptions{Args: []any{now, t.String()}}); err != nil {
 		return fmt.Errorf("invites: revoke: %w", err)
 	}
-	if conn.Changes() == 0 {
-		return ErrNotFound
-	}
 	return nil
+}
+
+// tokenExists reports whether a row exists for the given token, regardless
+// of its revoked/consumed state.
+func tokenExists(conn *sqlite.Conn, t Token) (bool, error) {
+	var found bool
+	err := sqlitex.Execute(conn,
+		`SELECT 1 FROM invites WHERE token = ?;`,
+		&sqlitex.ExecOptions{
+			Args: []any{t.String()},
+			ResultFunc: func(stmt *sqlite.Stmt) error {
+				found = true
+				return nil
+			},
+		})
+	return found, err
 }
 
 // Consume marks an invite as used. It runs against the caller-supplied
