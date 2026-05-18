@@ -1,23 +1,37 @@
 # Sprint 6 — Implementation Plan
 
-Status: **Draft 2026-05-12.** Pending Sprint 5 close.
+Status: **Ready for verification 2026-05-17.** Sprint 5 closed at
+commit `64c425b` (T7); the post-sprint review and preflight cleanup
+have landed (`81e9bcf` + `c2ea23b` + `3739a56`). See
+[`docs/sprint-5-review.md`](sprint-5-review.md).
 
-> **Note:** This is a draft prepared while Sprint 5 was still being
-> planned. Do **not** start work until Sprint 5 closes and this plan
-> has been reviewed against the actual Sprint-5-landed code. Likely
-> updates after Sprint 5 closes:
+> **Note:** This plan was drafted (2026-05-12) while Sprint 5 was
+> still being implemented. The "likely updates after Sprint 5 closes"
+> list has been folded into the plan but the entry checklist below
+> has **not** yet been re-verified end-to-end against landed `main`.
+> Run that verification pass as step zero of T1.1 before flipping it
+> to `IN_PROGRESS`.
 >
-> - Reconcile any schema or store API drift introduced by Sprint 5
->   (especially in `internal/users` — the bridge table joins users
->   and the new `suspended_at` / `last_login_at` columns may affect
->   the Players/Gamemasters count queries).
-> - Pin the partial-index pattern Sprint 5 used for soft-deletes
->   (the `archived_at` column on `games` and the `is_active` column
->   on `game_users` follow the same shape).
-> - Update the entry checklist with the actual Sprint-5 closing
->   commit hash and any contracts that moved.
-> - Re-confirm the sidebar slot ordering ("Games" between "Users"
->   and the future "Server" entry).
+> Folded-in updates:
+>
+> - Soft-delete partial-index pattern pinned in design decision #10.
+>   `games.Store.Archive` and `members.Store.RemoveMember` follow the
+>   pre-check + conditional UPDATE shape established by
+>   `users.Store.Suspend` and `invites.Store.Revoke` (review item H2).
+> - `internal/dbx` (`BoolToInt` / `ParseTime` / `NowISO`), package
+>   status constants, the `isHXFragmentRequest` helper, and the
+>   cached `*Server.baseURL` field landed in the preflight cleanup.
+>   Design decision #10 requires `internal/games` to inherit them
+>   instead of re-creating local copies.
+> - Sidebar slot ordering ("Games" between Users and the future
+>   Server entry from Sprint 7) re-confirmed in T4.
+>
+> Still to verify at T1.1 kickoff (not yet done):
+>
+> - Whether Sprint-5 schema / store drift in `internal/users`
+>   touches the bridge-table count queries in T3.1.
+> - Every other line of the entry checklist below against landed
+>   `main`.
 
 Sprint 6 is the second of three "admin tasks" sprints driven by
 Miko's design notes in [`docs/admin-tasks-design.md`](admin-tasks-design.md).
@@ -97,10 +111,14 @@ Rules:
 
 Before starting T1.1, confirm:
 
-- Sprint 5 is closed and `main` carries: the `0002_user_status.sql`
-  and `0003_invite_status.sql` migrations; the `RecordLogin` /
-  `Suspend` / `Reactivate` user-store methods; soft-revoked invites;
-  the "Administration" / "Invitations" copy rename.
+- Sprint 5 is closed at commit `64c425b` (T7) and `main` carries:
+  the `0002_user_status.sql` and `0003_invite_status.sql`
+  migrations; the `RecordLogin` / `Suspend` / `Reactivate`
+  user-store methods; soft-revoked invites; the "Administration" /
+  "Invitations" copy rename. The Sprint-5 preflight cleanup
+  (`81e9bcf` + `c2ea23b` + `3739a56`) added `internal/dbx`, the
+  `users.Status*` constants, and the conventions captured in
+  design decision #10 below.
 - Schema is at versions 1, 2, 3; this sprint adds 4 and 5.
 - The admin pages render through `layout_app.html` with the Sprint-4
   shell; sidebar uses `SectionAdmin*` constants.
