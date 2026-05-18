@@ -122,6 +122,9 @@ a pointer for future contributors who notice the gap.
 
 ## Medium — worth doing as part of Sprint 6 setup
 
+**Status update 2026-05-17:** M1, M3, M4, M5 landed as the Sprint-5
+preflight cleanup. M2 and M6 remain open (see per-finding notes).
+
 ### M1. `signupURL` recomputes the base on every call; `loadInviteRows` calls it per-row
 
 `internal/server/admin_invites.go:284-288` and `:268-279`. `signupURL`
@@ -136,6 +139,14 @@ store it on `*Server` (e.g. `s.baseURL`). `signupURL` becomes
 While there: pass the already-built URL into `rowViewAt` instead of
 calling `s.signupURL(inv)` three times in two callsites (`Resend`
 calls it twice — once for the email body, once for the rendered row).
+
+**Resolved 2026-05-17.** `*Server` carries a new `baseURL` field
+populated in `Server.New` via
+`strings.TrimRight(cfg.BaseURL, "/")`. `signupURL` is a one-line
+`fmt.Sprintf` over the pre-trimmed base. `strings` is no longer
+imported by `admin_invites.go`. The triple-call pattern in `Resend`
+was left as-is — the call is now cheap enough that wiring it
+through one more parameter wasn't worth the code churn.
 
 ### M2. `handleAdminInvitesRevoke` does an extra `GetByToken` after a successful `Revoke`
 
@@ -169,6 +180,12 @@ through and get a row partial instead of a full page.
 Fix: replace both raw header checks with `isHXFragmentRequest(c)`.
 Add the same lint to the Sprint 6 admin-games handlers.
 
+**Resolved 2026-05-17.** Both call-sites in
+`handleAdminInvitesResend` and `handleAdminInvitesRevoke` now use
+`isHXFragmentRequest(c)`, matching the `errors.go` precedent and
+correctly excluding `hx-boost` full-page navigations from the
+fragment path.
+
 ### M4. `boolToInt` / `parseTime` are duplicated in two packages; about to be three
 
 `internal/users/users.go:329-339` and `internal/invites/invites.go:367-377`
@@ -183,6 +200,15 @@ that returns `time.Now().UTC().Format(time.RFC3339Nano)` — the
 last is sprinkled in 6+ places across the two stores.
 
 Don't extract `classifyInsertErr` / `rowExists` yet — see L3.
+
+**Resolved 2026-05-17.** New package `internal/dbx` ships
+`BoolToInt`, `ParseTime`, and `NowISO`. Both `users` and `invites`
+import it; the local `boolToInt`/`parseTime` definitions and the
+inline `time.Now().UTC().Format(time.RFC3339Nano)` boilerplate are
+gone wherever the time.Time itself wasn't also needed (the few
+sites that need both, e.g. `invites.Create` computing `expires :=
+now.Add(ttl)`, keep the inline form). Sprint 6's `internal/games`
+should import `dbx` directly from day one.
 
 ### M5. Status taxonomies are sprinkled string literals (users) vs. typed constants (invites)
 
@@ -199,6 +225,15 @@ pattern there from the start — `games.StatusSetup` etc. — and
 backfill `users.StatusActive`/`StatusSuspended` so the
 admin-users handler stops carrying display strings inline. Cheap,
 prevents typo-drift between Go and template tests.
+
+**Resolved 2026-05-17.** `users` now exports `StatusActive` and
+`StatusSuspended`. Both inline literals in
+`internal/server/admin_users.go` (the list-row decorator and
+`newAdminUserView`) use the constants. Templates were left alone —
+they pin the rendered text, which the constants emit verbatim, so
+the test contract is preserved. Sprint 6 should follow the same
+pattern in `internal/games`: package-exported status constants,
+handler-side decoration, templates pin the rendered text.
 
 ### M6. `pages/admin_user_view.html` mixes "Admin" attribute label and the new "Account status" block
 
@@ -331,22 +366,20 @@ domain types.
 
 ---
 
-## Recommended sequencing for Sprint 6 preflight
+## Sprint 6 preflight — landed
 
-Before T1.1 starts, land a single small "Sprint 5 cleanup" commit
-that:
+All items in this section landed in two commits on 2026-05-17:
 
-1. Extracts `internal/dbx` with `BoolToInt`, `ParseTime`, `NowISO`
-   (M4) and migrates users + invites onto it.
-2. Adds `users.StatusActive` / `StatusSuspended` constants and
-   replaces the inline strings (M5).
-3. Replaces the raw `HX-Request` header checks in
-   `admin_invites.go` with `isHXFragmentRequest` (M3).
-4. Caches `s.baseURL` on `*Server` (M1).
+- H1 (Mailgun-in-transaction) and H2 (Revoke idempotency) — see
+  the High section.
+- M1 (`s.baseURL` cache), M3 (`isHXFragmentRequest`), M4
+  (`internal/dbx`), M5 (`users.Status*` constants) — see the
+  Medium section.
 
-That's < 150 lines of diff, all reversible, and lets Sprint 6 copy
-the right shape from day one.
+H3 is documented project policy (DESIGN.md §8.9) and is
+intentionally left as-is.
 
-H1 (Mailgun-in-transaction) and H2 (Revoke idempotency) landed on
-2026-05-17 — see the per-finding Resolved notes. H3 is the
-documented project policy (DESIGN.md §8.9) and is left as-is.
+Open follow-ups remaining at Sprint 6 kickoff: M2 (one extra
+`GetByToken` in `Revoke`'s HTMX path), M6 (role rendering
+inconsistency between admin user list and detail), and all of the
+Low section. None are blockers; address opportunistically.

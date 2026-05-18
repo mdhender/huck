@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -36,6 +37,12 @@ type Server struct {
 	logger   *slog.Logger
 
 	jwtKey []byte
+	// baseURL is cfg.BaseURL with any trailing slash trimmed once at
+	// startup. signupURL (and any future absolute-URL helper) concatenates
+	// against this directly so the per-call TrimRight is avoided —
+	// loadInviteRows is the hot path that motivated this (sprint-5-review
+	// M1).
+	baseURL string
 }
 
 // New returns an Echo instance fully configured with middleware, routes,
@@ -68,6 +75,7 @@ func New(cfg *config.Config, pool *sqlitex.Pool, usersStore *users.Store, invite
 		mailer:   mailer,
 		logger:   logger,
 		jwtKey:   []byte(cfg.JWTSecret),
+		baseURL:  strings.TrimRight(cfg.BaseURL, "/"),
 	}
 
 	s.installErrorHandler()

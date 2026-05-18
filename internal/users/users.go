@@ -12,6 +12,8 @@ import (
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
+
+	"github.com/mdhender/huck/internal/dbx"
 )
 
 // Sentinel errors mapped centrally by internal/server/errors.go.
@@ -19,6 +21,15 @@ var (
 	ErrNotFound    = errors.New("user not found")
 	ErrHandleTaken = errors.New("handle already in use")
 	ErrEmailTaken  = errors.New("email already in use")
+)
+
+// Status values returned by the server's view layer for the
+// admin-users list/detail pages. Exported as constants so the
+// templates and tests share the same vocabulary the invites package
+// already uses (invites.StatusPending et al).
+const (
+	StatusActive    = "Active"
+	StatusSuspended = "Suspended"
 )
 
 // User is the row shape consumed by handlers.
@@ -81,12 +92,12 @@ func (s *Store) CreateOnConn(conn *sqlite.Conn, in NewUser) (User, error) {
 		return User{}, errors.New("users: handle, email, and password hash are required")
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	err := sqlitex.Execute(conn, `
 		INSERT INTO users (handle, email, password_hash, is_admin, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?);`,
 		&sqlitex.ExecOptions{
-			Args: []any{in.Handle, in.Email, in.PasswordHash, boolToInt(in.IsAdmin), now, now},
+			Args: []any{in.Handle, in.Email, in.PasswordHash, dbx.BoolToInt(in.IsAdmin), now, now},
 		})
 	if err != nil {
 		return User{}, classifyInsertErr(conn, in.Handle, in.Email, err)
@@ -131,10 +142,10 @@ func (s *Store) ListAll(ctx context.Context) ([]User, error) {
 					Email:        stmt.ColumnText(2),
 					PasswordHash: stmt.ColumnText(3),
 					IsAdmin:      stmt.ColumnInt64(4) != 0,
-					CreatedAt:    parseTime(stmt.ColumnText(5)),
-					UpdatedAt:    parseTime(stmt.ColumnText(6)),
-					LastLoginAt:  parseTime(stmt.ColumnText(7)),
-					SuspendedAt:  parseTime(stmt.ColumnText(8)),
+					CreatedAt:    dbx.ParseTime(stmt.ColumnText(5)),
+					UpdatedAt:    dbx.ParseTime(stmt.ColumnText(6)),
+					LastLoginAt:  dbx.ParseTime(stmt.ColumnText(7)),
+					SuspendedAt:  dbx.ParseTime(stmt.ColumnText(8)),
 				})
 				return nil
 			},
@@ -154,10 +165,10 @@ func (s *Store) SetAdmin(ctx context.Context, id int64, isAdmin bool) error {
 	}
 	defer s.pool.Put(conn)
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE users SET is_admin = ?, updated_at = ? WHERE id = ?;`,
-		&sqlitex.ExecOptions{Args: []any{boolToInt(isAdmin), now, id}}); err != nil {
+		&sqlitex.ExecOptions{Args: []any{dbx.BoolToInt(isAdmin), now, id}}); err != nil {
 		return fmt.Errorf("users: set admin: %w", err)
 	}
 	if conn.Changes() == 0 {
@@ -179,7 +190,7 @@ func (s *Store) SetPassword(ctx context.Context, id int64, passwordHash string) 
 	}
 	defer s.pool.Put(conn)
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?;`,
 		&sqlitex.ExecOptions{Args: []any{passwordHash, now, id}}); err != nil {
@@ -200,7 +211,7 @@ func (s *Store) RecordLogin(ctx context.Context, id int64) error {
 	}
 	defer s.pool.Put(conn)
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?;`,
 		&sqlitex.ExecOptions{Args: []any{now, now, id}}); err != nil {
@@ -231,7 +242,7 @@ func (s *Store) Suspend(ctx context.Context, id int64) error {
 		return ErrNotFound
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE users SET suspended_at = ?, updated_at = ?
 		 WHERE id = ? AND suspended_at IS NULL;`,
@@ -250,7 +261,7 @@ func (s *Store) Reactivate(ctx context.Context, id int64) error {
 	}
 	defer s.pool.Put(conn)
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE users SET suspended_at = NULL, updated_at = ? WHERE id = ?;`,
 		&sqlitex.ExecOptions{Args: []any{now, id}}); err != nil {
@@ -310,10 +321,10 @@ func getOneOnConn(conn *sqlite.Conn, query string, arg any) (User, error) {
 			u.Email = stmt.ColumnText(2)
 			u.PasswordHash = stmt.ColumnText(3)
 			u.IsAdmin = stmt.ColumnInt64(4) != 0
-			u.CreatedAt = parseTime(stmt.ColumnText(5))
-			u.UpdatedAt = parseTime(stmt.ColumnText(6))
-			u.LastLoginAt = parseTime(stmt.ColumnText(7))
-			u.SuspendedAt = parseTime(stmt.ColumnText(8))
+			u.CreatedAt = dbx.ParseTime(stmt.ColumnText(5))
+			u.UpdatedAt = dbx.ParseTime(stmt.ColumnText(6))
+			u.LastLoginAt = dbx.ParseTime(stmt.ColumnText(7))
+			u.SuspendedAt = dbx.ParseTime(stmt.ColumnText(8))
 			return nil
 		},
 	})
@@ -324,18 +335,6 @@ func getOneOnConn(conn *sqlite.Conn, query string, arg any) (User, error) {
 		return User{}, ErrNotFound
 	}
 	return u, nil
-}
-
-func parseTime(s string) time.Time {
-	t, _ := time.Parse(time.RFC3339Nano, s)
-	return t
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // classifyInsertErr maps SQLite UNIQUE failures to our sentinel errors.

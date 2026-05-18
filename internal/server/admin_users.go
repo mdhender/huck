@@ -135,9 +135,9 @@ func (s *Server) handleAdminUsersList(c *echo.Context) error {
 		if u.IsAdmin {
 			role = "Admin"
 		}
-		status := "Active"
+		status := users.StatusActive
 		if u.IsSuspended() {
-			status = "Suspended"
+			status = users.StatusSuspended
 		}
 		var lastLogin, lastLoginISO string
 		if !u.LastLoginAt.IsZero() {
@@ -289,10 +289,10 @@ func (s *Server) renderAdminUserEditError(c *echo.Context, claims *auth.Claims, 
 func newAdminUserView(claims *auth.Claims, u users.User) adminUserView {
 	createdAt, createdAtISO := fmtUTC(u.CreatedAt)
 	updatedAt, updatedAtISO := fmtUTC(u.UpdatedAt)
-	status := "Active"
+	status := users.StatusActive
 	var suspendedAt, suspendedAtISO string
 	if u.IsSuspended() {
-		status = "Suspended"
+		status = users.StatusSuspended
 		suspendedAt, suspendedAtISO = fmtUTC(u.SuspendedAt)
 	}
 	return adminUserView{

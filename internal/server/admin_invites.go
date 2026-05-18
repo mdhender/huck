@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -226,7 +225,7 @@ func (s *Server) handleAdminInvitesResend(c *echo.Context) error {
 		s.logger.Error("admin invite resend mail failed", "err", err, "email", inv.Email)
 		return echo.NewHTTPError(http.StatusBadGateway, "Resend failed at the mail provider.")
 	}
-	if c.Request().Header.Get("HX-Request") == "true" {
+	if isHXFragmentRequest(c) {
 		return c.Render(http.StatusOK, "partials/invite_row.html", rowView(inv, s.signupURL(inv)))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/invites")
@@ -243,7 +242,7 @@ func (s *Server) handleAdminInvitesRevoke(c *echo.Context) error {
 	if err := s.invites.Revoke(ctx, tok); err != nil {
 		return err
 	}
-	if c.Request().Header.Get("HX-Request") != "true" {
+	if !isHXFragmentRequest(c) {
 		return c.Redirect(http.StatusSeeOther, "/admin/invites")
 	}
 	inv, err := s.invites.GetByToken(ctx, tok)
@@ -290,11 +289,12 @@ func (s *Server) loadInviteRows(c *echo.Context) ([]inviteRowView, error) {
 
 // signupURL builds the absolute signup link embedded in invite mail.
 // The email query param mirrors what the recipient will see prefilled
-// in the form (DESIGN.md §9, sprint-2.md "In scope").
+// in the form (DESIGN.md §9, sprint-2.md "In scope"). s.baseURL is
+// pre-trimmed at server construction, so this is allocation-light
+// enough for the per-row loadInviteRows call site.
 func (s *Server) signupURL(inv invites.Invite) string {
-	base := strings.TrimRight(s.cfg.BaseURL, "/")
 	return fmt.Sprintf("%s/signup/%s?email=%s",
-		base, inv.Token.String(), url.QueryEscape(inv.Email))
+		s.baseURL, inv.Token.String(), url.QueryEscape(inv.Email))
 }
 
 // rowView is rowViewAt with time.Now() supplied; convenient for callers

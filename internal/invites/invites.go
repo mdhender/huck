@@ -12,6 +12,7 @@ import (
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
+	"github.com/mdhender/huck/internal/dbx"
 	// invites depends on users for the shared handle/email normaliser
 	// (sprint-3 T9). The dependency direction matches signup, where the
 	// server consumes an invite *and* creates a user in the same flow,
@@ -139,7 +140,7 @@ func (s *Store) CreateOnConn(conn *sqlite.Conn, in NewInvite) (Invite, error) {
 				tok.String(),
 				in.Email,
 				in.InvitedBy,
-				boolToInt(in.IsAdmin),
+				dbx.BoolToInt(in.IsAdmin),
 				now.Format(time.RFC3339Nano),
 				expires.Format(time.RFC3339Nano),
 			},
@@ -178,14 +179,14 @@ func (s *Store) ListAll(ctx context.Context) ([]Invite, error) {
 					Email:     stmt.ColumnText(1),
 					InvitedBy: stmt.ColumnInt64(2),
 					IsAdmin:   stmt.ColumnInt(3) != 0,
-					CreatedAt: parseTime(stmt.ColumnText(4)),
-					ExpiresAt: parseTime(stmt.ColumnText(5)),
+					CreatedAt: dbx.ParseTime(stmt.ColumnText(4)),
+					ExpiresAt: dbx.ParseTime(stmt.ColumnText(5)),
 				}
 				if stmt.ColumnType(6) != sqlite.TypeNull {
-					inv.ConsumedAt = parseTime(stmt.ColumnText(6))
+					inv.ConsumedAt = dbx.ParseTime(stmt.ColumnText(6))
 				}
 				if stmt.ColumnType(7) != sqlite.TypeNull {
-					inv.RevokedAt = parseTime(stmt.ColumnText(7))
+					inv.RevokedAt = dbx.ParseTime(stmt.ColumnText(7))
 				}
 				out = append(out, inv)
 				return nil
@@ -276,7 +277,7 @@ func (s *Store) Revoke(ctx context.Context, t Token) error {
 		return ErrNotFound
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE invites SET revoked_at = ? WHERE token = ? AND revoked_at IS NULL;`,
 		&sqlitex.ExecOptions{Args: []any{now, t.String()}}); err != nil {
@@ -335,7 +336,7 @@ func (s *Store) Consume(ctx context.Context, conn *sqlite.Conn, t Token) error {
 		return ErrExpired
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := dbx.NowISO()
 	if err := sqlitex.Execute(conn,
 		`UPDATE invites SET consumed_at = ? WHERE token = ? AND consumed_at IS NULL;`,
 		&sqlitex.ExecOptions{Args: []any{now, t.String()}}); err != nil {
@@ -368,13 +369,13 @@ func getByToken(conn *sqlite.Conn, t Token) (Invite, error) {
 				inv.Email = stmt.ColumnText(1)
 				inv.InvitedBy = stmt.ColumnInt64(2)
 				inv.IsAdmin = stmt.ColumnInt(3) != 0
-				inv.CreatedAt = parseTime(stmt.ColumnText(4))
-				inv.ExpiresAt = parseTime(stmt.ColumnText(5))
+				inv.CreatedAt = dbx.ParseTime(stmt.ColumnText(4))
+				inv.ExpiresAt = dbx.ParseTime(stmt.ColumnText(5))
 				if stmt.ColumnType(6) != sqlite.TypeNull {
-					inv.ConsumedAt = parseTime(stmt.ColumnText(6))
+					inv.ConsumedAt = dbx.ParseTime(stmt.ColumnText(6))
 				}
 				if stmt.ColumnType(7) != sqlite.TypeNull {
-					inv.RevokedAt = parseTime(stmt.ColumnText(7))
+					inv.RevokedAt = dbx.ParseTime(stmt.ColumnText(7))
 				}
 				return nil
 			},
@@ -386,18 +387,6 @@ func getByToken(conn *sqlite.Conn, t Token) (Invite, error) {
 		return Invite{}, ErrNotFound
 	}
 	return inv, nil
-}
-
-func parseTime(s string) time.Time {
-	t, _ := time.Parse(time.RFC3339Nano, s)
-	return t
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // classifyInsertErr maps the SQLite UNIQUE failure on the
